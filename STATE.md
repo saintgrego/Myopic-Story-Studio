@@ -537,6 +537,21 @@ rendering code.
   per the standing gotcha above, the prompt-side mapping only exists in a backend started
   after this change. No live parse was run this session (no backend up); the previously
   flagged "lies flat on his back" prompt is the obvious re-verification case.
+- **Follow-up (same day): backend restarted, prompt verified, one stale-prompt bug found and
+  fixed.** Captured the SYSTEM_PROMPT the restarted backend actually builds (stubbed
+  `global.fetch` around the real `parsePromptToScene`, dummy key never sent): the pose list
+  correctly offered `lying.glb` — but the unmatched-posture rule's hardcoded example still
+  read "(lying down, climbing, a handstand)", telling the model lying has NO matching pose in
+  direct contradiction of the list above it. Adding a pose whose posture appears in that
+  example list requires editing the example too — `poses.json` alone doesn't reach it.
+  Changed to "(climbing, a handstand, mid-leap)" and restarted; re-capture confirms the
+  contradiction is gone.
+- **Live parse still pending: blocked on the API key, not on code.** This remote session has
+  no `myopic-studio/.env` (gitignored, correctly) and no `ANTHROPIC_API_KEY` in the
+  environment; `POST /api/parse` on the restarted backend returns the expected 500. To
+  finish verification locally: pull, restart the backend, parse "A man lies flat on his back
+  in an empty warehouse" — expect `characters[0].mesh` = `{"kind":"gltf","path":
+  "/assets/poses/lying.glb"}` and NO `characters[0].poseNote` in `flaggedParams`.
 
 ## Test suite added (2026-08-01): DONE, 24 tests passing
 
