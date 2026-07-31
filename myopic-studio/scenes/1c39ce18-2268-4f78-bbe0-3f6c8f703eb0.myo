@@ -1,0 +1,150 @@
+{
+  "scene_id": "1c39ce18-2268-4f78-bbe0-3f6c8f703eb0",
+  "title": "Apartment Window Talk — Dusk",
+  "created": "2026-07-14T19:55:59.378Z",
+  "prompt": "Interior of a 12th floor apartment, early evening. Two figures are standing between two windows that look out onto the city, talking.",
+  "environment": {
+    "locationName": "Interior, 12th floor apartment",
+    "timeOfDay": "Dusk",
+    "weather": "[?]"
+  },
+  "lighting": {
+    "scheme": "Practical",
+    "keyLightAzimuth": 100,
+    "keyLightElevation": 15,
+    "keyLightColor": "#FFAE63",
+    "fillIntensity": 0.4,
+    "rimLight": true,
+    "rimIntensity": 0.35,
+    "shadowSoftness": 0.6,
+    "moodPreset": "Golden Hour"
+  },
+  "camera": {
+    "shotType": "MS",
+    "angle": "Eye Level",
+    "focalLength": 50,
+    "depthOfField": 4,
+    "focusSubjectId": null,
+    "position": {
+      "x": 0,
+      "y": 1.6,
+      "z": 4
+    },
+    "movement": "Static",
+    "aspectRatio": "16:9"
+  },
+  "characters": [
+    {
+      "id": "char_01",
+      "figureName": "figure by the left window",
+      "position": {
+        "x": -0.7,
+        "y": 0,
+        "z": -1
+      },
+      "rotation": {
+        "x": 0,
+        "y": 90,
+        "z": 0
+      },
+      "scale": 1,
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "capsule",
+        "dimensions": [
+          0.4,
+          1.8
+        ]
+      }
+    },
+    {
+      "id": "char_02",
+      "figureName": "figure by the right window",
+      "position": {
+        "x": 0.7,
+        "y": 0,
+        "z": -1
+      },
+      "rotation": {
+        "x": 0,
+        "y": -90,
+        "z": 0
+      },
+      "scale": 1,
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "capsule",
+        "dimensions": [
+          0.4,
+          1.8
+        ]
+      }
+    }
+  ],
+  "props": [
+    {
+      "id": "prop_01",
+      "propName": "left window overlooking city",
+      "position": {
+        "x": -2.2,
+        "y": 0.9,
+        "z": -1.5
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "box",
+        "dimensions": [
+          1.2,
+          2,
+          0.1
+        ]
+      }
+    },
+    {
+      "id": "prop_02",
+      "propName": "right window overlooking city",
+      "position": {
+        "x": 2.2,
+        "y": 0.9,
+        "z": -1.5
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "box",
+        "dimensions": [
+          1.2,
+          2,
+          0.1
+        ]
+      }
+    }
+  ],
+  "storyboard_notes": "Two figures converse in a 12th-floor apartment at dusk, framed between two large windows with the city visible beyond. Warm, fading evening light spills in, casting soft golden tones across the interior.",
+  "flagged_params": [
+    "environment.weather"
+  ]
+}

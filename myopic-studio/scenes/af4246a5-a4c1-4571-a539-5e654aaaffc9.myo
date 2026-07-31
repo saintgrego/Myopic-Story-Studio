@@ -1,0 +1,184 @@
+{
+  "scene_id": "af4246a5-a4c1-4571-a539-5e654aaaffc9",
+  "title": "Server Room — Late Night Vigil",
+  "created": "2026-07-14T19:33:14.041Z",
+  "prompt": "Interior. A cramped server room, late night. Banks of blinking servers. A lone technician hunches over a terminal, face lit by screen glow. Tight over-the-shoulder shot.",
+  "environment": {
+    "locationName": "Cramped server room, interior",
+    "timeOfDay": "Night",
+    "weather": "[?]"
+  },
+  "lighting": {
+    "scheme": "Practical",
+    "keyLightAzimuth": 0,
+    "keyLightElevation": 15,
+    "keyLightColor": "#66CCFF",
+    "fillIntensity": 0.2,
+    "rimLight": true,
+    "rimIntensity": 0.4,
+    "shadowSoftness": 0.25,
+    "moodPreset": "Noir"
+  },
+  "camera": {
+    "shotType": "MS",
+    "angle": "Eye Level",
+    "focalLength": 50,
+    "depthOfField": 2.8,
+    "focusSubjectId": "char_01",
+    "position": {
+      "x": 0.6,
+      "y": 1.6,
+      "z": 1.2
+    },
+    "movement": "Static",
+    "aspectRatio": "2.39:1"
+  },
+  "characters": [
+    {
+      "id": "char_01",
+      "figureName": "the technician",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 180,
+        "z": 0
+      },
+      "scale": 1,
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "capsule",
+        "dimensions": [
+          0.4,
+          1.8
+        ]
+      }
+    }
+  ],
+  "props": [
+    {
+      "id": "prop_01",
+      "propName": "terminal desk",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": -0.6
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "box",
+        "dimensions": [
+          1.2,
+          0.8,
+          0.6
+        ]
+      }
+    },
+    {
+      "id": "prop_02",
+      "propName": "monitor screen",
+      "position": {
+        "x": 0,
+        "y": 0.8,
+        "z": -0.9
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "box",
+        "dimensions": [
+          0.5,
+          0.35,
+          0.05
+        ]
+      }
+    },
+    {
+      "id": "prop_03",
+      "propName": "server rack bank (left)",
+      "position": {
+        "x": -2.5,
+        "y": 0,
+        "z": -2.5
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "box",
+        "dimensions": [
+          0.8,
+          2,
+          0.6
+        ]
+      }
+    },
+    {
+      "id": "prop_04",
+      "propName": "server rack bank (right)",
+      "position": {
+        "x": 2.5,
+        "y": 0,
+        "z": -2.5
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "box",
+        "dimensions": [
+          0.8,
+          2,
+          0.6
+        ]
+      }
+    }
+  ],
+  "storyboard_notes": "Tight, claustrophobic over-the-shoulder framing emphasizes isolation; blinking server LEDs provide intermittent rim light against the cold blue glow of the terminal screen illuminating the technician's face. Tension should read through contrast between deep shadow and harsh screen light.",
+  "flagged_params": [
+    "environment.weather"
+  ]
+}

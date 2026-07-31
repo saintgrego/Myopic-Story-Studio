@@ -1,0 +1,98 @@
+{
+  "scene_id": "7eb7999a-e618-408c-84c8-cbdd4a62e91a",
+  "title": "Tree on a Hill — Sunset",
+  "created": "2026-07-14T20:22:44.140Z",
+  "prompt": "A distant shot of a tree on a hill at sunset",
+  "environment": {
+    "locationName": "Solitary hillside",
+    "setting": "Exterior",
+    "timeOfDay": "Dusk",
+    "weather": "clear"
+  },
+  "lighting": {
+    "scheme": "Natural",
+    "keyLightAzimuth": 270,
+    "keyLightElevation": 8,
+    "keyLightColor": "#FF8C42",
+    "fillIntensity": 0.25,
+    "rimLight": true,
+    "rimIntensity": 0.65,
+    "shadowSoftness": 0.6,
+    "moodPreset": "Golden Hour"
+  },
+  "camera": {
+    "shotType": "ELS",
+    "angle": "Eye Level",
+    "focalLength": 35,
+    "depthOfField": 8,
+    "focusSubjectId": null,
+    "position": {
+      "x": 0,
+      "y": 1.6,
+      "z": 25
+    },
+    "movement": "Static",
+    "aspectRatio": "2.39:1"
+  },
+  "characters": [],
+  "props": [
+    {
+      "id": "prop_01",
+      "propName": "the hill",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": -5
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "cone",
+        "dimensions": [
+          12,
+          3
+        ]
+      }
+    },
+    {
+      "id": "prop_02",
+      "propName": "the lone tree",
+      "position": {
+        "x": 0,
+        "y": 3,
+        "z": -5
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "cone",
+        "dimensions": [
+          2,
+          5
+        ]
+      }
+    }
+  ],
+  "storyboard_notes": "A quiet, minimalist wide shot emphasizing the silhouette of a solitary tree atop a hill against the warm glow of a setting sun. Composition favors negative space and isolation; the low, golden backlighting creates a strong rim/silhouette effect.",
+  "flagged_params": []
+}

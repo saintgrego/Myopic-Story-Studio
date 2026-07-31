@@ -1,0 +1,67 @@
+{
+  "scene_id": "d330bdf7-4351-4e27-9765-7fdd94569a0e",
+  "title": "Distant Figure at Sunset",
+  "created": "2026-07-14T19:42:47.388Z",
+  "prompt": "Exterior, sunset, cloudy. A figure is seen in the distance",
+  "environment": {
+    "locationName": "Open exterior landscape",
+    "timeOfDay": "Dusk",
+    "weather": "Overcast, cloudy sunset"
+  },
+  "lighting": {
+    "scheme": "Natural",
+    "keyLightAzimuth": 270,
+    "keyLightElevation": 8,
+    "keyLightColor": "#FFAE7A",
+    "fillIntensity": 0.6,
+    "rimLight": false,
+    "rimIntensity": "[?]",
+    "shadowSoftness": 0.8,
+    "moodPreset": "Golden Hour"
+  },
+  "camera": {
+    "shotType": "ELS",
+    "angle": "Eye Level",
+    "focalLength": 35,
+    "depthOfField": 8,
+    "focusSubjectId": "char_01",
+    "position": {
+      "x": 0,
+      "y": 1.6,
+      "z": 5
+    },
+    "movement": "Static",
+    "aspectRatio": "2.39:1"
+  },
+  "characters": [
+    {
+      "id": "char_01",
+      "figureName": "the distant figure",
+      "position": {
+        "x": 2,
+        "y": 0,
+        "z": -10
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": 1,
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "capsule",
+        "dimensions": [
+          0.4,
+          1.8
+        ]
+      }
+    }
+  ],
+  "props": [],
+  "storyboard_notes": "Wide, atmospheric exterior shot at dusk under heavy cloud cover; sunset light is muted and diffuse. A lone figure appears small and silhouetted far in the distance, emphasizing isolation and scale against the moody sky.",
+  "flagged_params": [
+    "lighting.rimIntensity"
+  ]
+}

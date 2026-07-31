@@ -1,0 +1,22 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "myopic-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "myopic-studio", "run", "dev"],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "myopic-web-alt",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "BROWSER=none npm --prefix myopic-studio run start"
+      ],
+      "port": 3001,
+      "autoPort": true
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "frames": [
+    {
+      "sceneFilename": "1c39ce18-2268-4f78-bbe0-3f6c8f703eb0.myo",
+      "sceneTitle": "Apartment Window Talk — Dusk",
+      "notes": "",
+      "cameraLabel": "MS · 50mm",
+      "frameId": "1fa1e869-ebbf-4d24-9d5d-acb6d4c191d4",
+      "shotNumber": 20
+    },
+    {
+      "sceneFilename": "d330bdf7-4351-4e27-9765-7fdd94569a0e.myo",
+      "sceneTitle": "Distant Figure at Sunset",
+      "notes": "",
+      "cameraLabel": "ELS · 35mm",
+      "frameId": "0e27aacc-7526-43af-9575-ff152d82aa39",
+      "shotNumber": 10
+    }
+  ]
+}

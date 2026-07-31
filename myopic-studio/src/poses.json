@@ -1,0 +1,17 @@
+[
+  {
+    "name": "standing",
+    "path": "/assets/poses/standing.glb",
+    "hint": "upright on their feet"
+  },
+  {
+    "name": "sitting",
+    "path": "/assets/poses/sitting.glb",
+    "hint": "seated — on a chair, bench, ledge, or the ground"
+  },
+  {
+    "name": "crouching",
+    "path": "/assets/poses/crouching.glb",
+    "hint": "crouched, hunched over, bent forward, kneeling at something"
+  }
+]

@@ -1,0 +1,92 @@
+{
+  "scene_id": "4f4fefce-bdbe-471c-94f4-9b4bbf9a8d18",
+  "title": "Pier at Dawn — Solitary Woman",
+  "created": "2026-07-31T21:10:42.059Z",
+  "prompt": "A woman sits alone at the end of a wooden pier at dawn, light mist over the lake. Wide shot from the shore.",
+  "environment": {
+    "locationName": "Wooden pier over a lake",
+    "setting": "Exterior",
+    "timeOfDay": "Dawn",
+    "weather": "light mist"
+  },
+  "lighting": {
+    "scheme": "Natural",
+    "keyLightAzimuth": 95,
+    "keyLightElevation": 12,
+    "keyLightColor": "#FFD9B3",
+    "fillIntensity": 0.4,
+    "rimLight": true,
+    "rimIntensity": 0.3,
+    "shadowSoftness": 0.8,
+    "moodPreset": "Golden Hour"
+  },
+  "camera": {
+    "shotType": "LS",
+    "angle": "Eye Level",
+    "focalLength": 35,
+    "depthOfField": 5.6,
+    "focusSubjectId": "char_01",
+    "position": {
+      "x": 0,
+      "y": 1.6,
+      "z": 8
+    },
+    "movement": "Static",
+    "aspectRatio": "2.39:1"
+  },
+  "characters": [
+    {
+      "id": "char_01",
+      "figureName": "the woman",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": -6
+      },
+      "rotation": {
+        "x": 0,
+        "y": 180,
+        "z": 0
+      },
+      "scale": 1,
+      "visible": true,
+      "mesh": {
+        "kind": "gltf",
+        "path": "/assets/poses/sitting.glb"
+      }
+    }
+  ],
+  "props": [
+    {
+      "id": "prop_01",
+      "propName": "wooden pier",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 1
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "box",
+        "dimensions": [
+          1.5,
+          0.3,
+          10
+        ]
+      }
+    }
+  ],
+  "storyboard_notes": "Quiet, contemplative mood — solitary figure emphasized by scale against mist and calm water. Soft dawn light should diffuse through the mist, muting contrast and softening shadows.",
+  "flagged_params": []
+}
