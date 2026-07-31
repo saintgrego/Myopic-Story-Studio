@@ -28,7 +28,7 @@ npm run build      # production build (includes CRA's ESLint) — verified passi
 node scripts/generate-pose-glbs.mjs   # regenerate the pose .glb library
 ```
 
-- **There is no test suite.** `npm test` exits 1 with "No tests found" — zero test files exist. The `@testing-library/*` / `@types/jest` deps are unused CRA scaffold leftovers. The real gates are `npx tsc --noEmit` and `npm run build`.
+- **There is no test suite.** `npm test` exits 1 with "No tests found" — zero test files exist. The real gates are `npx tsc --noEmit` and `npm run build`.
 - There is no separate lint script; ESLint (`react-app` config) runs inside `npm start`/`npm run build`.
 - **Restart the backend after editing `server/*.js`** — it's a plain node process. A newly added route 404ing is almost always a stale backend, not a bug.
 - The backend port env var is `MYOPIC_SERVER_PORT`, **not** `PORT` (CRA's dev tooling owns `PORT`). The `PORT=4000` line in `.env.example` is stale — the server never reads it. Use `MYOPIC_SERVER_PORT=4001 node server/index.js` to run a second backend instance (useful for testing parser changes while another backend holds :4000; note the CRA proxy is hardcoded to :4000).
@@ -78,11 +78,9 @@ PRD §11's test: a viewport feature is in scope if it answers a *blocking* quest
 
 ## Known cruft, dead ends, and legacy (document-only — deliberately not cleaned up)
 
-- `@anthropic-ai/sdk` is a declared dependency that **nothing imports** — leftover from the pre-backend scaffold that called Anthropic from the browser. The live pattern is raw `fetch` in `server/parser.js`. Prefer that; if you remove the dep, that's the whole change.
-- `@testing-library/*`, `@types/jest` — installed by CRA, never used (see "no test suite" above).
+- The Anthropic call is raw `fetch` in `server/parser.js`, deliberately not the SDK (`@anthropic-ai/sdk` was a leftover dep from the pre-backend scaffold and has been removed — don't reintroduce it just to make one API call).
 - Naming trap: `src/lib/parser.ts` is *not* a parser — it's a thin fetch wrapper for `POST /api/parse`. The actual LLM parser is `server/parser.js`.
 - `.env.example`'s `PORT=4000` line is dead (see Commands).
-- `.claude/settings.local 2.json` is a stale duplicate of `settings.local.json`.
 - Mixed module systems, all intentional given the toolchain: `server/` is CommonJS, `scripts/` is ESM `.mjs`, `src/` is TS. Match whichever you're editing.
 - `~34 npm audit` vulnerabilities from `react-scripts`' old transitive deps — known, pre-existing; `audit fix --force` would break the CRA toolchain for no benefit.
 - `scenes/*.myo` and `storyboard.json` are **the user's data**, checked into the working tree. Don't edit or delete them except through the app or at the user's request; remember storyboard edits persist with no save gate.
