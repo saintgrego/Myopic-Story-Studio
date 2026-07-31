@@ -192,6 +192,12 @@ function buildFigure(pose) {
   const root = new THREE.Group();
   root.name = 'mannequin';
 
+  // Whole-figure orientation, for poses that aren't upright (lying). rootLift
+  // raises the rotated figure so its lowest surface rests at y = 0, keeping
+  // the base-anchored position convention.
+  root.rotation.x = pose.rootRotX ?? 0;
+  root.position.y = pose.rootLift ?? 0;
+
   const hips = new THREE.Group();
   hips.position.y = pose.hipY;
   root.add(hips);
@@ -318,6 +324,10 @@ const POSES = {
   sitting: { hipY: 0.46, thighForward: -Math.PI / 2, kneeBend: Math.PI / 2, armForward: -0.5, elbowBend: -0.4 },
   // Deep knee bend + waist hunch — "hunches over a terminal".
   crouching: { hipY: 0.5, thighForward: -1.6, kneeBend: 2.0, torsoBend: 0.55, armForward: -1.0, elbowBend: -0.5 },
+  // Flat on the back, face up, feet at the origin, head toward -Z: the standing
+  // figure rotated at the root, lifted by the torso radius (0.15, the deepest
+  // point behind the back) so the back rests on the floor.
+  lying: { hipY: 0.77, rootRotX: -Math.PI / 2, rootLift: 0.15 },
 };
 
 mkdirSync(OUT_DIR, { recursive: true });

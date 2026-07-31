@@ -517,6 +517,27 @@ rendering code.
 - Gotcha: after hand-editing a `.myo`, re-selecting the same scene in the dropdown does
   nothing (same value, no `change` event) — clear the select and re-set it, or reload the page.
 
+### Fourth pose — lying (2026-07-31): DONE, gates verified
+
+- Closes a gap the earlier live parses exposed twice: "man lies flat on his back" and the
+  sprawled third figure both fell to nearest-pose + `poseNote` flag because no lying pose
+  existed. The library is now standing / sitting / crouching / **lying**.
+- Followed the documented recipe exactly — generator row + re-run + `poses.json` row; zero
+  viewport code touched (v1.2 acceptance #3 exercised again, for real this time).
+- Generator change: joint bends couldn't express a horizontal figure, so `buildFigure` gained
+  two whole-figure params, `rootRotX` (rotation at the root) and `rootLift` (raise the rotated
+  figure so its lowest surface rests at y = 0, preserving base-anchored positions). Lying is
+  the standing figure rotated −π/2 at the root and lifted 0.15 — the torso radius, the deepest
+  point behind the back. Face up, feet at the origin, head toward −Z.
+- **Evidence** — loaded the exported `.glb`s back through `GLTFLoader` under Node and measured
+  `Box3` bounds: standing spans y 0→1.60; lying spans y 0→0.31 and z −1.60→0, min y exactly
+  0.00. Horizontal, resting on the floor, base-anchored. All four files regenerated (~87 KB
+  each); `npx tsc --noEmit` clean; `npm run build` passing.
+- Parser + pose dropdown pick the new pose up automatically (both read `poses.json`) — but
+  per the standing gotcha above, the prompt-side mapping only exists in a backend started
+  after this change. No live parse was run this session (no backend up); the previously
+  flagged "lies flat on his back" prompt is the obvious re-verification case.
+
 ## Test suite added (2026-08-01): DONE, 24 tests passing
 
 - Replaced the "no test suite" state with unit tests on CRA's bundled Jest 27 (no new test
