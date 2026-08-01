@@ -11,13 +11,22 @@ import { useStoryboardStore } from './store/storyboardStore';
 const EXAMPLE_PROMPT =
   'Interior. A cramped server room, late night. Banks of blinking servers. A lone technician hunches over a terminal, face lit by screen glow. Tight over-the-shoulder shot.';
 
+// Panel open/closed state, persisted per key; anything but the stored string 'false' means open.
+function usePersistedOpen(key: string): [boolean, React.Dispatch<React.SetStateAction<boolean>>] {
+  const [open, setOpen] = useState(() => localStorage.getItem(key) !== 'false');
+  useEffect(() => {
+    localStorage.setItem(key, String(open));
+  }, [key, open]);
+  return [open, setOpen];
+}
+
 export default function App() {
   const [prompt, setPrompt] = useState(EXAMPLE_PROMPT);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showRaw, setShowRaw] = useState(false);
-  const [hierarchyOpen, setHierarchyOpen] = useState(true);
-  const [propertiesOpen, setPropertiesOpen] = useState(true);
+  const [hierarchyOpen, setHierarchyOpen] = usePersistedOpen('myopic.hierarchyOpen');
+  const [propertiesOpen, setPropertiesOpen] = usePersistedOpen('myopic.propertiesOpen');
 
   const [scenes, setScenes] = useState<SceneSummary[]>([]);
   const [selectedFilename, setSelectedFilename] = useState('');
