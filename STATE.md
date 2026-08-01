@@ -576,3 +576,36 @@ rendering code.
   overwrite by `sceneId`) has the real values and `flagged_params: []`.
 - Browser-automation note reconfirmed: the save button reads `Save .myo *` when dirty —
   match button text with `startsWith('Save .myo')`, not equality.
+
+## Collapsible panels + persisted collapse state (2026-08-01): DONE
+
+Two commits, both `src/App.tsx` only — no store, viewport, backend, schema, or parser changes.
+
+- **`f58a563` — collapsible Hierarchy and Properties panels.** Each panel header gained a
+  chevron that collapses it to a **36px rail** carrying a vertical label
+  (`[writing-mode:vertical-rl]`); clicking the rail expands it back. The layout is one grid
+  whose `grid-template-columns` is picked from the four open/closed combinations
+  (`240px,1fr,320px` → `36px,1fr,36px`), animated with
+  `transition-[grid-template-columns] duration-200`.
+  - **The Viewport needed no change at all.** It already carries a `ResizeObserver`, so the
+    canvas re-fits itself when the grid columns animate — measured **333px → 821px** wide with
+    both panels collapsed. That observer is the reason this was a one-file change; anything
+    else that resizes the middle column should lean on it rather than adding resize plumbing.
+- **`2ca7789` — collapse state persisted.** A small `usePersistedOpen(key)` hook holds the
+  state in `localStorage` under `myopic.hierarchyOpen` / `myopic.propertiesOpen`. The read is
+  `localStorage.getItem(key) !== 'false'`, so a missing or unrecognised value **fails open** —
+  first run behaves exactly as before, and a corrupt key can never leave a panel hidden with
+  no obvious way back.
+
+Gates re-run after both commits: `npx tsc --noEmit` clean, `npm run test:ci` **28/28**,
+working tree clean. No new tests — this is App.tsx chrome, and the project has no
+@testing-library/React-rendering setup (see the "Deliberately untested" note in the test-suite
+section); the behaviour was verified in the browser by measuring the canvas.
+
+### Rules worth remembering
+
+- **Fail open on persisted UI state.** `!== 'false'` rather than `=== 'true'` is deliberate:
+  the failure mode of a bad localStorage value should be a visible panel, not a vanished one.
+  Apply the same default to any future persisted chrome.
+- This is the first use of `localStorage` in the app. It holds **UI chrome only** — scene and
+  storyboard data stay on disk via the backend. Don't let scene state drift into it.
