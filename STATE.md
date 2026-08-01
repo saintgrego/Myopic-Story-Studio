@@ -546,12 +546,17 @@ rendering code.
   example list requires editing the example too — `poses.json` alone doesn't reach it.
   Changed to "(climbing, a handstand, mid-leap)" and restarted; re-capture confirms the
   contradiction is gone.
-- **Live parse still pending: blocked on the API key, not on code.** This remote session has
-  no `myopic-studio/.env` (gitignored, correctly) and no `ANTHROPIC_API_KEY` in the
-  environment; `POST /api/parse` on the restarted backend returns the expected 500. To
-  finish verification locally: pull, restart the backend, parse "A man lies flat on his back
-  in an empty warehouse" — expect `characters[0].mesh` = `{"kind":"gltf","path":
-  "/assets/poses/lying.glb"}` and NO `characters[0].poseNote` in `flaggedParams`.
+- **Live-parse verification: PASS (same day, user supplied the key mid-session).**
+  Backend restarted with the key loaded, then two live parses through `POST /api/parse`:
+  - "A man lies flat on his back in an empty warehouse" → `characters[0].mesh` =
+    `{"kind":"gltf","path":"/assets/poses/lying.glb"}`, no `poseNote` anywhere, no
+    `characters[i].poseNote` in `flaggedParams` (the flags present were the usual
+    unstated-lighting/camera sentinels from a minimal prompt). This exact prompt shape
+    previously fell to nearest-pose + flag — the gap is closed.
+  - Regression check that editing the unmatched-posture example didn't break the flag path:
+    "A gymnast does a handstand in the middle of a gym" → nearest pose (`standing.glb`),
+    `characters[0].poseNote` present in `flaggedParams`, and the field itself correctly
+    stripped from the scene. The flag mechanism survives.
 
 ## Test suite added (2026-08-01): DONE, 24 tests passing
 
