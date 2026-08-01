@@ -1,0 +1,140 @@
+{
+  "scene_id": "62a26f9c-b87b-411f-9631-c6331356b7f1",
+  "title": "Two Detectives — Office at Night",
+  "created": "2026-08-01T13:58:50.980Z",
+  "prompt": "Test scene: two detectives in a dim interior office at night. One stands by the window, the other sits at a desk with a lamp on it. Camera at eye level on a 35mm lens, framing both.",
+  "environment": {
+    "locationName": "Detective's office, interior",
+    "setting": "Interior",
+    "timeOfDay": "Night",
+    "weather": "clear"
+  },
+  "lighting": {
+    "scheme": "Practical",
+    "keyLightAzimuth": 200,
+    "keyLightElevation": 20,
+    "keyLightColor": "#FFD580",
+    "fillIntensity": 0.2,
+    "rimLight": true,
+    "rimIntensity": 0.3,
+    "shadowSoftness": 0.3,
+    "moodPreset": "Noir"
+  },
+  "camera": {
+    "shotType": "MLS",
+    "angle": "Eye Level",
+    "focalLength": 35,
+    "depthOfField": 2.8,
+    "focusSubjectId": null,
+    "position": {
+      "x": 0,
+      "y": 1.6,
+      "z": 4
+    },
+    "movement": "Static",
+    "aspectRatio": "2.39:1"
+  },
+  "characters": [
+    {
+      "id": "char_01",
+      "figureName": "the detective by the window",
+      "position": {
+        "x": -2.2,
+        "y": 0,
+        "z": -1.5
+      },
+      "rotation": {
+        "x": 0,
+        "y": 90,
+        "z": 0
+      },
+      "scale": 1,
+      "visible": true,
+      "mesh": {
+        "kind": "gltf",
+        "path": "/assets/poses/standing.glb"
+      }
+    },
+    {
+      "id": "char_02",
+      "figureName": "the detective at the desk",
+      "position": {
+        "x": 1,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 180,
+        "z": 0
+      },
+      "scale": 1,
+      "visible": true,
+      "mesh": {
+        "kind": "gltf",
+        "path": "/assets/poses/sitting.glb"
+      }
+    }
+  ],
+  "props": [
+    {
+      "id": "prop_01",
+      "propName": "desk",
+      "position": {
+        "x": 1,
+        "y": 0,
+        "z": -0.2
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "box",
+        "dimensions": [
+          1.2,
+          0.75,
+          0.6
+        ]
+      }
+    },
+    {
+      "id": "prop_02",
+      "propName": "desk lamp",
+      "position": {
+        "x": 1.3,
+        "y": 0.75,
+        "z": -0.3
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "cylinder",
+        "dimensions": [
+          0.12,
+          0.4
+        ]
+      }
+    }
+  ],
+  "storyboard_notes": "Dim, moody office at night, single practical light source (desk lamp) casting warm pool of light amid darkness — noir tone. Window in background near the standing detective, suggesting faint ambient light from outside. Camera holds both detectives in frame at eye level with a 35mm lens for a balanced, observational feel.",
+  "flagged_params": []
+}
