@@ -516,3 +516,42 @@ rendering code.
   before judging parser behavior.
 - Gotcha: after hand-editing a `.myo`, re-selecting the same scene in the dropdown does
   nothing (same value, no `change` event) — clear the select and re-set it, or reload the page.
+
+## Test suite added (2026-08-01): DONE, 24 tests passing
+
+- Replaced the "no test suite" state with unit tests on CRA's bundled Jest 27 (no new test
+  runner — `react-scripts test`). New script `test:ci` runs once (`--watchAll=false`);
+  plain `npm test` is watch mode. The gate set is now: `npx tsc --noEmit` → `npm run test:ci`
+  → `npm run build`, all three verified passing together after the change.
+- Four suites in `src/__tests__/` (24 tests):
+  - `myoFormat.test.ts` — §7.1 envelope: top-level snake_case key set exact, nested content
+    untouched/camelCase, lossless round-trip.
+  - `parser.test.ts` — `collectFlaggedPaths` (dot-paths, `[i]` array indices, no-flag case)
+    and `parsePromptToScene` with `global.fetch` mocked: text block selected by type with a
+    leading thinking block, fence stripping, poseNote flagged-then-stripped, max_tokens /
+    non-ok / invalid-JSON errors, missing-key error. `collectFlaggedPaths` is now exported
+    from `server/parser.js` for this (the only production code change).
+  - `sceneStore.test.ts` — `setField` nested + array-index paths, immutable replacement,
+    dirty/markSaved lifecycle, no-op without a scene. Zustand drives fine outside React via
+    `getState()`; no @testing-library needed.
+  - `poses.test.ts` — poses.json entries well-formed/unique and every path resolves to a real
+    `.glb` under `public/` (guards the poses.json ↔ generator drift case).
+- Gotchas hit:
+  - Jest 27's jsdom has no `structuredClone` (Node has it; the jsdom sandbox doesn't).
+    `src/setupTests.ts` backfills it from `v8` serialize/deserialize — sceneStore tests
+    fail without it.
+  - CRA's Jest only discovers tests under `src/`, and its allowed `package.json` jest
+    overrides do NOT include `roots` — so server tests live in `src/__tests__/` and
+    `require()` the CommonJS `server/*` modules directly (works; babel-jest transforms
+    outside `src/` too, and webpack's ModuleScopePlugin doesn't apply to Jest).
+  - Every file inside a `__tests__/` dir is collected as a suite — shared fixtures must live
+    elsewhere (`src/testUtils/sceneFixture.ts`).
+  - A test file with only `require()` and no ES imports trips `--isolatedModules` under
+    `tsc --noEmit` ("global script file") — needs an `export {}`.
+  - CRA sets Jest `resetMocks: true` — mock implementations must be created per-test (the
+    parser tests build a fresh `fetch` mock in each test for this reason).
+  - `@types/jest@^27.5.2` added as devDep (matches Jest 27) so the typecheck gate passes on
+    test files.
+- Deliberately untested: `Viewport.tsx` (Three.js/WebGL can't run under jsdom — verifying
+  rendering stays a browser-preview/screenshot job) and `server/index.js` routes (thin
+  Express glue; would need supertest — add later if route logic grows).

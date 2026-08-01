@@ -175,4 +175,4 @@ async function parsePromptToScene(prompt) {
   return { scene, rawJson };
 }
 
-module.exports = { parsePromptToScene };
+module.exports = { parsePromptToScene, collectFlaggedPaths };

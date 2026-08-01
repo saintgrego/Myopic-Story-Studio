@@ -24,11 +24,15 @@ npm run dev        # backend (:4000) + CRA dev server (:3000) via concurrently �
 npm run server     # backend alone (Express, plain node — NO hot reload)
 npm start          # frontend alone (CRA, hot reloads)
 npx tsc --noEmit   # the typecheck gate — verified clean; keep it that way
+npm run test:ci    # unit tests, single run (CRA Jest) — verified passing
 npm run build      # production build (includes CRA's ESLint) — verified passing
 node scripts/generate-pose-glbs.mjs   # regenerate the pose .glb library
 ```
 
-- **There is no test suite.** `npm test` exits 1 with "No tests found" — zero test files exist. The real gates are `npx tsc --noEmit` and `npm run build`.
+- **Tests** live in `src/__tests__/` and run on CRA's bundled Jest 27 (`npm test` for watch mode, `npm run test:ci` for one shot). They cover the `.myo` envelope mapping, the parser's flag/poseNote post-processing (Anthropic API mocked via `global.fetch`), the `sceneStore` `setField` path machinery, and poses.json ↔ `public/assets/poses/*.glb` consistency. Three gates now: `npx tsc --noEmit`, `npm run test:ci`, `npm run build`.
+  - Test files must stay under `src/` (CRA's Jest roots); they may `require()` the CommonJS `server/*` modules directly. Shared fixtures live in `src/testUtils/` — anything inside a `__tests__/` dir is treated as a suite.
+  - `src/setupTests.ts` backfills `structuredClone` (Jest 27's jsdom predates it) — sceneStore tests break without it.
+  - Viewport.tsx is deliberately untested (Three.js/WebGL doesn't run under jsdom).
 - There is no separate lint script; ESLint (`react-app` config) runs inside `npm start`/`npm run build`.
 - **Restart the backend after editing `server/*.js`** — it's a plain node process. A newly added route 404ing is almost always a stale backend, not a bug.
 - The backend port env var is `MYOPIC_SERVER_PORT`, **not** `PORT` (CRA's dev tooling owns `PORT`). The `PORT=4000` line in `.env.example` is stale — the server never reads it. Use `MYOPIC_SERVER_PORT=4001 node server/index.js` to run a second backend instance (useful for testing parser changes while another backend holds :4000; note the CRA proxy is hardcoded to :4000).
