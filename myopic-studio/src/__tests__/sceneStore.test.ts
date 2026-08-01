@@ -55,6 +55,34 @@ describe('sceneStore', () => {
     expect(state.scene?.title).toBe('Edited');
   });
 
+  test('setField clears the flag for a resolved param', () => {
+    useSceneStore.getState().loadScene(makeScene());
+    useSceneStore.getState().setField(['environment', 'weather'], 'Clear');
+    const scene = useSceneStore.getState().scene!;
+    expect(scene.environment.weather).toBe('Clear');
+    expect(scene.flaggedParams).not.toContain('environment.weather');
+  });
+
+  test('setField keeps the flag when the value is still [?]', () => {
+    useSceneStore.getState().loadScene(makeScene());
+    useSceneStore.getState().setField(['environment', 'weather'], '[?]');
+    expect(useSceneStore.getState().scene?.flaggedParams).toContain('environment.weather');
+  });
+
+  test('setField clears bracket-format flags for array paths', () => {
+    const scene = makeScene();
+    scene.flaggedParams = ['characters[0].position.x'];
+    useSceneStore.getState().loadScene(scene);
+    useSceneStore.getState().setField(['characters', 0, 'position', 'x'], 1.5);
+    expect(useSceneStore.getState().scene?.flaggedParams).toEqual([]);
+  });
+
+  test('setField on an unflagged path leaves flaggedParams alone', () => {
+    useSceneStore.getState().loadScene(makeScene());
+    useSceneStore.getState().setField(['camera', 'focalLength'], 85);
+    expect(useSceneStore.getState().scene?.flaggedParams).toEqual(['environment.weather']);
+  });
+
   test('characterIndex and propIndex find by id', () => {
     const scene = makeScene();
     expect(characterIndex(scene, 'char_01')).toBe(0);

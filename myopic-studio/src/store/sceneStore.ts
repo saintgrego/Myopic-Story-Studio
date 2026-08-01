@@ -22,6 +22,15 @@ function setAtPath(scene: SceneFile, path: PathSegment[], value: unknown): Scene
   return clone as unknown as SceneFile;
 }
 
+// Same dot-path format the parser's collectFlaggedPaths emits:
+// keys joined with '.', array indices as '[i]' (e.g. characters[0].position.x).
+function toFlagPath(path: PathSegment[]): string {
+  return path.reduce<string>(
+    (acc, seg) => (typeof seg === 'number' ? `${acc}[${seg}]` : acc ? `${acc}.${seg}` : seg),
+    ''
+  );
+}
+
 interface SceneStore {
   scene: SceneFile | null;
   selection: Selection;
@@ -41,7 +50,14 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
   setField: (path, value) => {
     const { scene } = get();
     if (!scene) return;
-    set({ scene: setAtPath(scene, path, value), dirty: true });
+    let next = setAtPath(scene, path, value);
+    if (value !== '[?]' && next.flaggedParams.length > 0) {
+      const flagPath = toFlagPath(path);
+      if (next.flaggedParams.includes(flagPath)) {
+        next = { ...next, flaggedParams: next.flaggedParams.filter((p) => p !== flagPath) };
+      }
+    }
+    set({ scene: next, dirty: true });
   },
   markSaved: () => set({ dirty: false }),
 }));

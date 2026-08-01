@@ -555,3 +555,24 @@ rendering code.
 - Deliberately untested: `Viewport.tsx` (Three.js/WebGL can't run under jsdom — verifying
   rendering stays a browser-preview/screenshot job) and `server/index.js` routes (thin
   Express glue; would need supertest — add later if route logic grows).
+
+## Flag resolution fix (2026-08-01): DONE, 28 tests passing
+
+- Gap found while resolving a scene's flagged params through the UI: nothing ever removed
+  an entry from `flaggedParams`. The parser sets it once at parse time; editing a flagged
+  field replaced the `[?]` value but the "N params need review" badge and the `.myo`'s
+  `flagged_params` stayed stale forever.
+- Fix in `sceneStore.setField` (the single edit path, so it catches every panel): after
+  `setAtPath`, if the new value isn't `'[?]'`, the path is converted to the parser's
+  dot-path format (`toFlagPath`: keys joined with `.`, array indices as `[i]` — mirrors
+  `collectFlaggedPaths` in `server/parser.js`) and dropped from `flaggedParams` if present.
+  Writing `'[?]'` back into a field keeps the flag.
+- 4 new tests in `sceneStore.test.ts` (resolve clears, `[?]` keeps, bracket-format array
+  paths clear, unflagged edits leave the list alone). `npx tsc --noEmit` clean,
+  `npm run test:ci` 28/28.
+- Live evidence: parsed test scene `62a26f9c` ("Two Detectives — Office at Night") had
+  `environment.weather` + `camera.aspectRatio` flagged; resolving them via the Environment
+  and Camera panels made the badge disappear, and the re-saved `.myo` (same file — saves
+  overwrite by `sceneId`) has the real values and `flagged_params: []`.
+- Browser-automation note reconfirmed: the save button reads `Save .myo *` when dirty —
+  match button text with `startsWith('Save .myo')`, not equality.
