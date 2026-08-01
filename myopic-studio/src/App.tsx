@@ -16,6 +16,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showRaw, setShowRaw] = useState(false);
+  const [hierarchyOpen, setHierarchyOpen] = useState(true);
+  const [propertiesOpen, setPropertiesOpen] = useState(true);
 
   const [scenes, setScenes] = useState<SceneSummary[]>([]);
   const [selectedFilename, setSelectedFilename] = useState('');
@@ -202,24 +204,74 @@ export default function App() {
         )}
 
         {scene && !showRaw && (
-          <div className="grid h-[70vh] grid-cols-[240px,1fr,320px] gap-4">
-            <div className="overflow-y-auto rounded-lg bg-zinc-800/60">
-              <h2 className="border-b border-zinc-700 px-3 py-2 text-xs font-bold uppercase tracking-widest text-zinc-500">
-                Hierarchy
-              </h2>
-              <SceneHierarchy />
-            </div>
+          <div
+            className={`grid h-[70vh] gap-4 transition-[grid-template-columns] duration-200 ${
+              hierarchyOpen && propertiesOpen
+                ? 'grid-cols-[240px,1fr,320px]'
+                : hierarchyOpen
+                ? 'grid-cols-[240px,1fr,36px]'
+                : propertiesOpen
+                ? 'grid-cols-[36px,1fr,320px]'
+                : 'grid-cols-[36px,1fr,36px]'
+            }`}
+          >
+            {hierarchyOpen ? (
+              <div className="overflow-y-auto rounded-lg bg-zinc-800/60">
+                <h2 className="flex items-center justify-between border-b border-zinc-700 px-3 py-2 text-xs font-bold uppercase tracking-widest text-zinc-500">
+                  Hierarchy
+                  <button
+                    onClick={() => setHierarchyOpen(false)}
+                    title="Collapse Hierarchy"
+                    className="px-1 text-zinc-500 hover:text-zinc-300"
+                  >
+                    «
+                  </button>
+                </h2>
+                <SceneHierarchy />
+              </div>
+            ) : (
+              <button
+                onClick={() => setHierarchyOpen(true)}
+                title="Expand Hierarchy"
+                className="flex flex-col items-center gap-2 rounded-lg bg-zinc-800/60 py-2 text-zinc-500 hover:text-zinc-300"
+              >
+                <span>»</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest [writing-mode:vertical-rl]">
+                  Hierarchy
+                </span>
+              </button>
+            )}
 
             <Viewport />
 
-            <div className="overflow-y-auto rounded-lg bg-zinc-800/60">
-              <h2 className="border-b border-zinc-700 px-3 py-2 text-xs font-bold uppercase tracking-widest text-zinc-500">
-                Properties
-              </h2>
-              <div className="px-3">
-                <PropertiesPanel />
+            {propertiesOpen ? (
+              <div className="overflow-y-auto rounded-lg bg-zinc-800/60">
+                <h2 className="flex items-center justify-between border-b border-zinc-700 px-3 py-2 text-xs font-bold uppercase tracking-widest text-zinc-500">
+                  Properties
+                  <button
+                    onClick={() => setPropertiesOpen(false)}
+                    title="Collapse Properties"
+                    className="px-1 text-zinc-500 hover:text-zinc-300"
+                  >
+                    »
+                  </button>
+                </h2>
+                <div className="px-3">
+                  <PropertiesPanel />
+                </div>
               </div>
-            </div>
+            ) : (
+              <button
+                onClick={() => setPropertiesOpen(true)}
+                title="Expand Properties"
+                className="flex flex-col items-center gap-2 rounded-lg bg-zinc-800/60 py-2 text-zinc-500 hover:text-zinc-300"
+              >
+                <span>«</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest [writing-mode:vertical-rl]">
+                  Properties
+                </span>
+              </button>
+            )}
           </div>
         )}
 
