@@ -23,6 +23,7 @@ import {
   TextField,
 } from './fields';
 import POSES from '../poses.json';
+import PROPS from '../props.json';
 
 const SETTING: Setting[] = ['Interior', 'Exterior'];
 const TIME_OF_DAY: TimeOfDay[] = ['Dawn', 'Morning', 'Midday', 'Dusk', 'Night'];
@@ -50,18 +51,36 @@ const DEFAULT_DIMENSIONS: Record<PrimitiveShape, number[]> = {
   cone: [0.5, 1],
 };
 
-// UI sugar over the mesh reference (PRD section 11, v1.2): a pose IS a mesh, so
-// selecting one rewrites the character's mesh to the pose's glTF path. There is
-// no pose field anywhere in the scene model.
-function PoseSelector({ path, mesh }: { path: PathSegment[]; mesh: MeshRef }) {
+type LibraryEntry = { name: string; path: string };
+
+// UI sugar over the mesh reference (PRD section 11, v1.2 for poses, v1.3 for
+// props): the mesh IS the pose / IS the object type, so selecting an entry
+// rewrites the object's mesh to that entry's glTF path. There is no `pose` field
+// and no `propType` field anywhere in the scene model — one control, two
+// libraries, because they are the same idea applied to characters and to props.
+function MeshLibrarySelector({
+  label,
+  library,
+  fallbackLabel,
+  fallback,
+  path,
+  mesh,
+}: {
+  label: string;
+  library: readonly LibraryEntry[];
+  fallbackLabel: string;
+  fallback: MeshRef;
+  path: PathSegment[];
+  mesh: MeshRef;
+}) {
   const setField = useSceneStore((s) => s.setField);
 
-  const currentPose = mesh.kind === 'gltf' ? POSES.find((p) => p.path === mesh.path) : undefined;
-  const isCustomGltf = mesh.kind === 'gltf' && !currentPose;
-  const value = currentPose ? currentPose.name : isCustomGltf ? 'custom' : 'none';
+  const current = mesh.kind === 'gltf' ? library.find((e) => e.path === mesh.path) : undefined;
+  const isCustomGltf = mesh.kind === 'gltf' && !current;
+  const value = current ? current.name : isCustomGltf ? 'custom' : 'none';
 
   return (
-    <Row label="Pose">
+    <Row label={label}>
       <select
         className={inputClass}
         value={value}
@@ -69,19 +88,24 @@ function PoseSelector({ path, mesh }: { path: PathSegment[]; mesh: MeshRef }) {
           const next = e.target.value;
           if (next === value || next === 'custom') return;
           // A custom glTF is a deliberate user attachment — confirm before replacing it.
-          if (isCustomGltf && !window.confirm(`Replace custom mesh "${mesh.kind === 'gltf' ? mesh.path : ''}" with a pose?`)) {
+          if (
+            isCustomGltf &&
+            !window.confirm(
+              `Replace custom mesh "${mesh.kind === 'gltf' ? mesh.path : ''}" with a ${label.toLowerCase()}?`,
+            )
+          ) {
             return;
           }
           if (next === 'none') {
-            setField(path, { kind: 'primitive', shape: 'capsule', dimensions: DEFAULT_DIMENSIONS.capsule });
+            setField(path, fallback);
           } else {
-            const pose = POSES.find((p) => p.name === next);
-            if (pose) setField(path, { kind: 'gltf', path: pose.path });
+            const entry = library.find((p) => p.name === next);
+            if (entry) setField(path, { kind: 'gltf', path: entry.path });
           }
         }}
       >
-        <option value="none">(none — capsule)</option>
-        {POSES.map((p) => (
+        <option value="none">{fallbackLabel}</option>
+        {library.map((p) => (
           <option key={p.name} value={p.name}>
             {p.name}
           </option>
@@ -347,7 +371,14 @@ export default function PropertiesPanel() {
         <NumberField label="Rotation Z" value={char.rotation.z} step={1} onChange={(v) => setField([...path, 'rotation', 'z'], v)} />
         <NumberField label="Scale" value={char.scale} step={0.05} min={0.01} onChange={(v) => setField([...path, 'scale'], v)} />
         <CheckboxField label="Visible" value={char.visible} onChange={(v) => setField([...path, 'visible'], v)} />
-        <PoseSelector path={[...path, 'mesh']} mesh={char.mesh} />
+        <MeshLibrarySelector
+          label="Pose"
+          library={POSES}
+          fallbackLabel="(none — capsule)"
+          fallback={{ kind: 'primitive', shape: 'capsule', dimensions: DEFAULT_DIMENSIONS.capsule }}
+          path={[...path, 'mesh']}
+          mesh={char.mesh}
+        />
         <MeshEditor path={[...path, 'mesh']} mesh={char.mesh} />
       </PanelSection>
     );
@@ -371,6 +402,14 @@ export default function PropertiesPanel() {
         <NumberField label="Scale Y" value={prop.scale.y} step={0.05} min={0.01} onChange={(v) => setField([...path, 'scale', 'y'], v)} />
         <NumberField label="Scale Z" value={prop.scale.z} step={0.05} min={0.01} onChange={(v) => setField([...path, 'scale', 'z'], v)} />
         <CheckboxField label="Visible" value={prop.visible} onChange={(v) => setField([...path, 'visible'], v)} />
+        <MeshLibrarySelector
+          label="Proxy"
+          library={PROPS}
+          fallbackLabel="(none — primitive)"
+          fallback={{ kind: 'primitive', shape: 'box', dimensions: DEFAULT_DIMENSIONS.box }}
+          path={[...path, 'mesh']}
+          mesh={prop.mesh}
+        />
         <MeshEditor path={[...path, 'mesh']} mesh={prop.mesh} />
       </PanelSection>
     );

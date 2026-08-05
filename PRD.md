@@ -82,7 +82,7 @@ Carry the parameter definitions forward from `myopic-3d-studio.md` sections 3.1�
 - **Lighting:** scheme, key direction (azimuth/elevation), key colour, fill ratio, rim toggle, shadow softness, mood preset. These map to real Three.js lights.
 - **Camera:** shot type, angle, focal length (mm), depth of field, focus subject, XYZ position, movement (metadata only), aspect ratio. **The focal length must genuinely drive the Three.js camera FOV.** A 35mm and an 85mm must look different.
 - **Characters:** figure ID, position XYZ, rotation, scale, visibility, `mesh` reference. Drop expression and costume — nothing to attach them to. **Posture (v1.2) is not a new field:** a pose is expressed entirely through the existing `mesh` reference — `/assets/poses/sitting.glb` *is* the sitting pose. See section 11 for why.
-- **Props:** prop ID, position, rotation, scale, visibility, `mesh` reference.
+- **Props:** prop ID, position, rotation, scale, visibility, `mesh` reference. **The mesh may be a library proxy (v1.3):** `/assets/props/sofa.glb` *is* the sofa, on the same "the mesh is the object type" reasoning as poses. See section 11.
 
 ### Scene file (`.myo`)
 
@@ -226,3 +226,54 @@ This replaces the removed non-goal. It is the whole of the standing policy on ho
 **Still out, and unaffected by this amendment:** runtime articulation of any kind (bones, IK, a pose editor), animation between poses (non-goal #6 stands), facial expression, and body-type variation. If a pose can't be expressed as "another `.glb` in the folder," it doesn't belong under this amendment.
 
 **Deliberately not decided here:** section 9's asset-pipeline question stays open. The generated proxy mannequins are the pose library's *current* content, not a commitment — a Mixamo or MakeHuman figure exported per-pose to `.glb` drops into the same folder under the same contract. Choosing that source remains the owner's call.
+
+### v1.3 — 5 August 2026: prop proxy library
+
+**Requested by the owner on 5 August 2026, from use:** "the basic shapes we're using as symbolic stand-ins aren't reading for me at all."
+
+**The diagnosis, which is the load-bearing part of this amendment.** v1.2 solved this for characters and left props behind. The parser was instructed (`server/parser.js`) that prop meshes are *always* primitives, and to pick "whichever primitive best approximates the silhouette." For a domestic interior that rule produces a sofa, a bed, a desk, a counter and a table which are all — correctly, by the rule — boxes. The viewport then shows a field of indistinguishable boxes, and the director has to *remember* which box was which. **That is a memory task, and the tool exists to replace it with a seeing task.** Blocking is not served by geometry that answers "something is here" but not "what."
+
+**Applying the section 11 test.** Recognisability of a prop is a *blocking* question: you cannot judge whether a figure can reach the counter, whether the sofa blocks the doorway, or whether the shot reads at 35mm if you cannot tell the furniture apart. It is not a finishing question — nothing here makes anything look shot, real, or good. **In scope.** Note what is *not* being claimed: this is not a licence to add texture, material variety, or detail that answers "does this look real." The out-list in "Rendering scope" is untouched.
+
+**The core decision — same one as v1.2: the mesh IS the object type.** A sofa is `/assets/props/sofa.glb`. There is no `propType` field, no shape-library enum on `Prop`, and no renderer change: `buildObject()` already treats glTF as first-class per section 4. This is v1.2's pattern applied to props, and it inherits v1.2's reasoning — a second source of truth for what an object looks like is exactly what section 4 forbids.
+
+**What changed in this document**
+
+- **Section 5 Props** — the `mesh` reference may now carry a library proxy path, not only a primitive.
+- Nothing else. The `.myo` envelope, the parser's output contract, and the scene schema are untouched by construction.
+
+**Authorized to build under this amendment**
+
+1. **The prop library.** `scripts/generate-prop-glbs.mjs` generates matte-grey proxy furniture into `public/assets/props/`; `src/props.json` is the single source of truth for the library, read by both the properties panel and the parser. Growing it is: add a row to the generator's `PROPS` table, re-run, add a row to `props.json`.
+2. **A proxy selector in the Prop properties panel** — the same UI sugar as the pose selector, sharing one component, rewriting the `mesh` reference (or back to a primitive).
+3. **Parser proxy mapping.** The system prompt lists the library with footprints; a described prop that matches gets the proxy, anything unmatched (a crate, a rock, a server rack) falls back to a primitive exactly as before. **No flag** — a primitive fallback is honest, not ambiguous, so unlike `poseNote` there is no `propNote`.
+
+**Colour, decided here:** proxies are matte grey (`0x8a8a90`), and the pose mannequins moved from blue (`0x6ea8ff`) to a lighter matte grey (`0xb8b8bd`) at the owner's instruction. The two greys differ by value on purpose: with hue gone, value is the only thing left separating figures from set dressing.
+
+**Acceptance (owner-verifiable, per section 8's convention):**
+- [ ] Parse an interior prompt naming furniture: the props arrive as recognisable proxies, not boxes.
+- [ ] Change a prop's proxy in the properties panel, save, reload — it persists (it's just the mesh path persisting).
+- [ ] Add a prop to the generator's table, re-run it, use it in a scene without touching viewport code.
+
+**Still out, and unaffected:** everything in the "Rendering scope" out-list. Also explicitly *not* authorized here: importing arbitrary user-downloaded `.glb` assets, an asset browser (non-goal #2 stands), and any set/room-level mesh — `Environment` still has no mesh field. Those were discussed alongside this change and deliberately not taken; see section 9, which stays open.
+
+### v1.4 — 5 August 2026: the warm/cool proxy palette
+
+**Requested by the owner on 5 August 2026**, immediately after v1.3 shipped: cool greys and warm greys, five values each, warm assigned to people and cool to everything else. This supersedes v1.3's single-value-per-class colour decision.
+
+**Applying the section 11 test.** Telling a figure from a piece of furniture, and telling two figures apart, are *blocking* questions — they are the "where is everyone standing" question at the level of "which one is that." v1.3 already conceded the principle by using value to separate figures from set dressing; this makes that separation carry hue as well, and gives each class five steps so neighbouring objects don't merge. **In scope.** These remain greys — 10–13% saturation, which is below the threshold where anyone would read them as a colour choice. Nothing here makes the picture look shot, real, or good, and the out-list is untouched.
+
+**The core decision — the palette is render-time, not scene state.** `src/palette.ts` holds two five-value ramps; `Viewport.tsx` assigns by the object's index in `scene.characters` / `scene.props`. There is **no colour field on `Character` or `Prop`**, and the `.myo` envelope is untouched. The rejected alternative was a per-object colour field: it would put a presentation choice into the user's saved data, make old `.myo` files inconsistent with new palettes, and hand the parser a decision it has no basis to make.
+
+**Assignment rule, decided here: cycle by index.** Chosen over pinning a value per prop *type* (two dining chairs side by side would merge) and over deriving value from object size (cannot separate two characters at all). Cycling guarantees adjacent objects differ and that a scene renders identically twice. The known cost, accepted: a sofa is not the same value from one scene to the next.
+
+**Custom assets keep their own materials.** Only library proxies (paths in `poses.json` / `props.json`) and primitives are tinted. A hand-attached `.glb` renders as authored — consistent with the properties panel already treating a custom mesh as a deliberate choice worth a confirm before replacing. This is the rule that will matter when section 9's asset-pipeline question is finally answered.
+
+**Value ranges** are offset — warm 0.60–0.88 L, cool 0.42–0.74 L — so figures sit lighter than set dressing on average. They overlap at the edges deliberately: a dark figure against a pale counter is a real shot, not a defect to be designed out.
+
+**Acceptance (owner-verifiable):**
+- [ ] A scene with two or more characters shows them at visibly different values.
+- [ ] Figures read as figures against furniture at a glance, in camera view, at 35mm.
+- [ ] Hiding a character does not re-colour the ones after it.
+
+**Consequence worth knowing:** the colours baked into the generated `.glb` files are now **fallbacks only** — they are what you see if a proxy is opened outside the app. They are set to the middle value of each ramp; if the palette is retuned, update them to match or accept the drift.

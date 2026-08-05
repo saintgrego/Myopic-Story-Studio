@@ -609,3 +609,154 @@ section); the behaviour was verified in the browser by measuring the canvas.
   Apply the same default to any future persisted chrome.
 - This is the first use of `localStorage` in the app. It holds **UI chrome only** — scene and
   storyboard data stay on disk via the backend. Don't let scene state drift into it.
+
+## Prop proxy library + matte grey palette (2026-08-05): BUILT, GATE NOW CLOSED (see live parse below)
+
+Owner report from use: *"the basic shapes we're using as symbolic stand-ins aren't reading for
+me at all."* Diagnosis and scope reasoning are in **PRD §11 v1.3** — the short version is that
+v1.2 fixed legibility for characters and left props on the "always a primitive" rule, so a
+domestic interior rendered as a field of identical boxes. **Zero renderer changes**; this is
+the pose pattern applied to props, exactly as PRD §4 promised.
+
+**What was added**
+
+- `scripts/generate-prop-glbs.mjs` — 12 domestic-interior proxies (sofa, armchair,
+  dining-table, dining-chair, bed, desk, office-chair, bookshelf, counter, door, window,
+  floor-lamp) built from primitives and exported to `public/assets/props/`.
+- `src/props.json` — single source of truth, mirroring `poses.json`, plus a `footprint`
+  (W×H×D metres) fed to the parser so it can judge whether a proxy fits.
+- `scripts/lib/glb.mjs` — the `FileReader` shim GLTFExporter needs under Node, previously
+  duplicated inline in the pose generator, now shared by both. **Both generators were re-run
+  after the refactor** — don't take this on trust if you touch it again.
+- `MeshLibrarySelector` in `PropertiesPanel.tsx` — `PoseSelector` generalised over a library;
+  characters get "Pose", props get "Proxy". Same custom-glTF confirm guard as before.
+- `src/__tests__/props.test.ts` (4 tests) and 2 additions to `parser.test.ts`.
+
+**Conventions baked into the geometry — violate these and objects float or face backwards**
+
+- **Base at y = 0.** `buildObject()` lifts *primitives* by half their vertical extent but does
+  **not** lift a glTF group, so proxy geometry must already sit on the floor. The one
+  exception is `window`, whose origin is the bottom of its frame so `position.y` reads as sill
+  height — noted in its `props.json` hint because the parser needs to know.
+- **Front faces +Z**, matching the mannequin's nose marker. A sofa's back is at −Z.
+- Proxies are life-sized, so the parser is told to leave `scale` at 1 — this is deliberately
+  guarding the Milestone 3 bug pattern where dimensions got duplicated into `scale`.
+
+**Parser change** (`server/parser.js`): the blanket "prop meshes are ALWAYS primitive" rule is
+replaced by first-choice-proxy / fallback-primitive, with the library and footprints injected
+the same way `POSE_LIST` is. **No `propNote` flag** — unlike an unmatched posture, an unmatched
+prop falling back to a primitive is honest rather than ambiguous, so there is nothing to review.
+
+**Palette:** props `0x8a8a90`, mannequins moved from blue `0x6ea8ff` to `0xb8b8bd`. The two
+greys differ by *value* on purpose — with hue gone that is the only thing separating figures
+from set dressing. `CHARACTER_COLOR` / `PROP_COLOR` in `Viewport.tsx` are untouched and still
+apply to primitives only.
+
+**Evidence**
+
+- `npx tsc --noEmit` clean. `npm run test:ci` **34/34**. `npm run build` compiled clean.
+- Silhouette contact sheet software-rendered from the generated `.glb` files (all 15, common
+  scale, ¾ view). First pass caught `armchair` collapsing into the same box silhouette as
+  `counter`; its arms were lifted to sit *on* the seat slab and the back made taller and
+  thinner, then re-rendered and confirmed distinct. That review is the entire point of the
+  change, so do it again if you add proxies.
+
+**Outstanding — the owner must run this locally**
+
+- **A live parse has not been run.** The sandbox routes egress through an HTTP proxy that
+  Node's `fetch` does not honour (`EAI_AGAIN api.anthropic.com`), so `POST /api/parse` returns
+  `{"error":"fetch failed"}` there while `curl` to the same host succeeds. The parser tests
+  cover the prompt contents and the post-processing path, but **the model's actual proxy
+  choices are unverified**. Restart the backend first — parser edits only exist in a backend
+  started after them.
+
+### Gotchas worth remembering
+
+- **`npm run build` hit `EPERM: unlink build/asset-manifest.json`** in the sandbox against the
+  mounted folder. Not a code fault — `BUILD_PATH=/tmp/... npm run build` is the way through if
+  it recurs; the pre-existing `build/` directory is what can't be removed.
+- Running `npx jest` directly fails with "Cannot use import statement outside a module" — the
+  Jest config lives in `react-scripts`. Always go through `npm run test:ci`.
+
+## Warm/cool proxy palette (2026-08-05): BUILT, GATE NOW CLOSED (see live parse below)
+
+Owner request straight after the prop library landed: cool greys and warm greys, five values
+each, warm for people and cool for everything else. Reasoning and the rejected alternatives are
+in **PRD §11 v1.4**; this supersedes v1.3's one-grey-per-class decision.
+
+- **`src/palette.ts`** — `WARM_GREYS` (h≈28°, L 0.60–0.88) and `COOL_GREYS` (h≈214°, L
+  0.42–0.74), five each, plus `characterColor(i)` / `propColor(i)` which cycle by index.
+  Saturation is 10–13%: greys, not colours.
+- **`Viewport.tsx`** — `CHARACTER_COLOR` / `PROP_COLOR` are gone. Colour comes from the palette
+  keyed on the object's index in `scene.characters` / `scene.props`. **The index is the array
+  position, not a filtered counter** — iterating with `.entries()` and `continue`-ing on
+  invisible objects is deliberate, so hiding one character cannot re-colour the rest.
+- **Library glTFs are now re-materialled at load.** `buildObject()` swaps in a fresh
+  `MeshStandardMaterial` when `mesh.path` is in `LIBRARY_PATHS` (the union of `poses.json` and
+  `props.json`), disposing what the loader built. **A .glb outside that set keeps its own
+  materials** — the deliberate-user-attachment rule, same principle as the panel's
+  replace-custom-mesh confirm. This is the hook the eventual asset pipeline will hang off.
+- **The colours baked into the generators are now fallbacks only**, set to the middle value of
+  each ramp (`WARM_GREYS[2]` / `COOL_GREYS[2]`). They are visible only if a `.glb` is opened
+  outside the app. Retune the palette → update those two constants or accept drift.
+- `src/__tests__/palette.test.ts` (7 tests) pins the *properties* rather than the hex values,
+  which are a taste call: five distinct values per ramp, monotonic value, warm ramps red-over-
+  blue and cool ramps blue-over-red, saturation under 0.2, deterministic cycling, adjacent
+  indices never equal, and nonsense indices degrading rather than returning `undefined`.
+
+**Evidence:** `npx tsc --noEmit` clean, `npm run test:ci` **41/41**, `npm run build` clean. A
+z-buffered software render of a mock interior (5 props cycling cool, 3 figures cycling warm)
+confirmed figures separate from set dressing at a glance and that no two neighbours merge.
+
+**Still outstanding, unchanged from v1.3:** no live parse has been run from this environment —
+see the sandbox proxy note above.
+
+### Gotcha worth remembering
+
+- The first version of that mock render used painter's-algorithm triangle sorting and produced
+  a **convincing but wrong** picture — figures behind furniture they were standing in front of.
+  It was replaced with a real z-buffer before anything was concluded from it. If you generate
+  offline preview renders to judge a visual change, make sure the renderer can actually resolve
+  occlusion, or you will review an artefact of the preview rather than the change.
+
+## Live parse gate for prop proxies (2026-08-05): PASS
+
+The gate left open by the two entries above — *"the model's actual proxy choices are
+unverified"* — has now been run from the owner's machine, where egress to `api.anthropic.com`
+works. Backend restarted first (fresh pid started 17:29:51 against a `server/parser.js` last
+modified 16:54:34), then one parse through the UI. **Result: the parser prefers library
+proxies, and the fallback stays honest.**
+
+Prompt was a deliberately furniture-dense interior: open-plan living room with sofa, bookshelf,
+armchair, floor lamp, dining table + four chairs, kitchen counter, window, door, plus a
+television on a low stand, and two characters (one sitting, one standing).
+
+**14 props parsed — 12 library proxies, 2 primitives:**
+
+- Proxied: `sofa`, `bookshelf`, `armchair`, `floor-lamp`, `dining-table`, `dining-chair` ×4,
+  `counter`, `window`, `door` — 9 distinct paths, all present in `props.json` and all resolving
+  to real `.glb` files. **No invented paths.** 9 of the 12 library entries exercised.
+- Primitive fallback: `TV stand` and `television`, neither of which has a proxy. This is the
+  intended honest fallback, not a miss — there was no library entry to choose.
+
+**The conventions the geometry depends on all survived the round trip:**
+
+- `window` came back at `position.y = 0.9` — the parser applied the sill-height exception from
+  its `props.json` hint rather than flooring it at 0. That is the subtle one, and it held.
+- `television` at `y = 0.4`, sitting on the 0.4 m-tall TV stand; every floor-standing prop at
+  `y = 0`. Base-anchoring is correct throughout.
+- Every prop `scale` is `{1,1,1}` — the Milestone 3 bug pattern (dimensions duplicated into
+  scale) did not reappear.
+- Characters got `sitting.glb` / `standing.glb` at `scale: 1`.
+- `flaggedParams` was `["environment.weather"]` only. No `propNote` — correct, there is no such
+  flag by design.
+
+Viewport render confirms the point of the whole change: the dining set, counter, floor lamp,
+window and door read as distinct objects at a glance instead of a field of identical boxes, in
+the warm/cool palette (warm figures, cool set dressing).
+
+### Gotcha worth remembering
+
+- **A furniture-dense parse is slow.** This one took roughly 45 s wall-clock before
+  `POST /api/parse` returned 200 (large scene + adaptive thinking sharing the 8192-token
+  budget). Nothing is wrong at 20 s — don't go hunting for a hang until well past a minute.

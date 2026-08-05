@@ -1,4 +1,5 @@
 const { parsePromptToScene, collectFlaggedPaths } = require('../../server/parser');
+const props = require('../props.json');
 
 export {}; // satisfy --isolatedModules; the file has no ES imports of its own
 
@@ -110,6 +111,38 @@ describe('parsePromptToScene', () => {
     const { scene } = await parsePromptToScene('someone lying on a bench');
     expect(scene.flaggedParams).toContain('characters[0].poseNote');
     expect(scene.characters[0]).not.toHaveProperty('poseNote');
+  });
+
+  // PRD §11 v1.3: props may now carry a library glTF proxy. Two things have to
+  // hold — the model is actually told the library exists, and a proxy it picks
+  // reaches the scene unmodified (the post-processing only touches poseNote).
+  test('sends every prop library path to the model in the system prompt', async () => {
+    mockApiResponse({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(modelScene()) }] });
+    await parsePromptToScene('an empty room');
+    const body = JSON.parse((globalThis.fetch as jest.Mock).mock.calls[0][1].body);
+    for (const prop of props) {
+      expect(body.system).toContain(prop.path);
+    }
+  });
+
+  test('keeps a library proxy mesh on a prop, at unit scale', async () => {
+    const prop = {
+      id: 'prop_01',
+      propName: 'the sofa',
+      position: { x: -1, y: 0, z: -1.5 },
+      rotation: { x: 0, y: 90, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+      visible: true,
+      mesh: { kind: 'gltf', path: '/assets/props/sofa.glb' },
+    };
+    mockApiResponse({
+      stop_reason: 'end_turn',
+      content: [{ type: 'text', text: JSON.stringify(modelScene({ props: [prop] })) }],
+    });
+    const { scene } = await parsePromptToScene('a sofa against the wall');
+    expect(scene.props[0].mesh).toEqual({ kind: 'gltf', path: '/assets/props/sofa.glb' });
+    expect(scene.props[0].scale).toEqual({ x: 1, y: 1, z: 1 });
+    expect(scene.flaggedParams).not.toContain('props[0].mesh');
   });
 
   test('throws when the response was truncated at max_tokens', async () => {

@@ -1,0 +1,74 @@
+[
+  {
+    "name": "sofa",
+    "path": "/assets/props/sofa.glb",
+    "hint": "sofa, couch, settee, two- or three-seater",
+    "footprint": [2.0, 0.85, 0.9]
+  },
+  {
+    "name": "armchair",
+    "path": "/assets/props/armchair.glb",
+    "hint": "armchair, easy chair, single upholstered seat with arms",
+    "footprint": [0.95, 0.85, 0.9]
+  },
+  {
+    "name": "dining-table",
+    "path": "/assets/props/dining-table.glb",
+    "hint": "dining table, kitchen table, round-legged table",
+    "footprint": [1.6, 0.75, 0.9]
+  },
+  {
+    "name": "dining-chair",
+    "path": "/assets/props/dining-chair.glb",
+    "hint": "dining chair, kitchen chair, plain upright chair with no arms",
+    "footprint": [0.45, 0.97, 0.45]
+  },
+  {
+    "name": "bed",
+    "path": "/assets/props/bed.glb",
+    "hint": "bed, double bed, mattress with a headboard — headboard faces -Z",
+    "footprint": [1.5, 0.9, 2.0]
+  },
+  {
+    "name": "desk",
+    "path": "/assets/props/desk.glb",
+    "hint": "desk, writing desk, workstation, panel-sided table",
+    "footprint": [1.4, 0.78, 0.7]
+  },
+  {
+    "name": "office-chair",
+    "path": "/assets/props/office-chair.glb",
+    "hint": "office chair, swivel chair, task chair on a star base",
+    "footprint": [0.6, 1.06, 0.6]
+  },
+  {
+    "name": "bookshelf",
+    "path": "/assets/props/bookshelf.glb",
+    "hint": "bookshelf, bookcase, shelving unit, cabinet of shelves",
+    "footprint": [0.8, 1.8, 0.3]
+  },
+  {
+    "name": "counter",
+    "path": "/assets/props/counter.glb",
+    "hint": "kitchen counter, worktop, kitchen island, service counter, bar",
+    "footprint": [2.1, 0.92, 0.7]
+  },
+  {
+    "name": "door",
+    "path": "/assets/props/door.glb",
+    "hint": "door, doorway, entrance — includes its frame",
+    "footprint": [1.0, 2.13, 0.12]
+  },
+  {
+    "name": "window",
+    "path": "/assets/props/window.glb",
+    "hint": "window — NOTE: origin is the bottom of the frame, so set position.y to the sill height (about 0.9), not 0",
+    "footprint": [1.3, 1.4, 0.14]
+  },
+  {
+    "name": "floor-lamp",
+    "path": "/assets/props/floor-lamp.glb",
+    "hint": "floor lamp, standing lamp, standard lamp",
+    "footprint": [0.36, 1.73, 0.36]
+  }
+]

@@ -5,11 +5,19 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { useSceneStore } from '../store/sceneStore';
 import type { Environment, MeshRef } from '../types/scene';
+import { characterColor, propColor } from '../palette';
+import POSES from '../poses.json';
+import PROPS from '../props.json';
 
 // Full-frame-equivalent sensor width used to derive FOV from a real-world focal length.
 const SENSOR_WIDTH_MM = 36;
-const CHARACTER_COLOR = 0x6ea8ff;
-const PROP_COLOR = 0xd9a441;
+
+// Library proxies (poses + props) are OURS, so the palette owns their colour at
+// render time and the baked-in generator colour is only a fallback. Anything
+// else pointing at a .glb is a deliberate user attachment and keeps its own
+// materials untouched — same principle as the panel's replace-custom-mesh
+// confirm (PRD §11 v1.4).
+const LIBRARY_PATHS = new Set<string>([...POSES, ...PROPS].map((entry) => entry.path));
 
 function num(v: number | '[?]', fallback: number): number {
   return v === '[?]' ? fallback : v;
@@ -171,6 +179,7 @@ function disposeObject3D(obj: THREE.Object3D) {
 function buildObject(mesh: MeshRef, color: number, onGltfError: (path: string) => void): THREE.Object3D {
   if (mesh.kind === 'gltf') {
     const group = new THREE.Group();
+    const tint = LIBRARY_PATHS.has(mesh.path);
     new GLTFLoader().load(
       mesh.path,
       (gltf) => {
@@ -178,6 +187,18 @@ function buildObject(mesh: MeshRef, color: number, onGltfError: (path: string) =
           if (child instanceof THREE.Mesh) {
             child.castShadow = true;
             child.receiveShadow = true;
+            if (tint) {
+              // Dispose what the loader built before dropping it — nothing else
+              // holds a reference, and disposeObject3D will only ever see the
+              // replacement.
+              const old = child.material;
+              (Array.isArray(old) ? old : [old]).forEach((m) => m.dispose());
+              child.material = new THREE.MeshStandardMaterial({
+                color,
+                roughness: 0.85,
+                metalness: 0.05,
+              });
+            }
           }
         });
         group.add(gltf.scene);
@@ -384,9 +405,11 @@ export default function Viewport() {
       contentGroup.add(rimLightObj);
     }
 
-    for (const char of scene.characters) {
+    // Palette index is the object's position in the scene array, NOT a filtered
+    // index — hiding a character must not re-colour the ones after it.
+    for (const [i, char] of scene.characters.entries()) {
       if (!char.visible) continue;
-      const group = buildObject(char.mesh, CHARACTER_COLOR, (path) =>
+      const group = buildObject(char.mesh, characterColor(i), (path) =>
         setGltfWarning(`Could not load glTF for ${char.id}: ${path}`),
       );
       group.position.set(num(char.position.x, 0), num(char.position.y, 0), num(char.position.z, 0));
@@ -399,9 +422,9 @@ export default function Viewport() {
       contentGroup.add(group);
     }
 
-    for (const prop of scene.props) {
+    for (const [i, prop] of scene.props.entries()) {
       if (!prop.visible) continue;
-      const group = buildObject(prop.mesh, PROP_COLOR, (path) =>
+      const group = buildObject(prop.mesh, propColor(i), (path) =>
         setGltfWarning(`Could not load glTF for ${prop.id}: ${path}`),
       );
       group.position.set(num(prop.position.x, 0), num(prop.position.y, 0), num(prop.position.z, 0));

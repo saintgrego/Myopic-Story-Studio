@@ -27,9 +27,10 @@ npx tsc --noEmit   # the typecheck gate — verified clean; keep it that way
 npm run test:ci    # unit tests, single run (CRA Jest) — verified passing
 npm run build      # production build (includes CRA's ESLint) — verified passing
 node scripts/generate-pose-glbs.mjs   # regenerate the pose .glb library
+node scripts/generate-prop-glbs.mjs   # regenerate the prop proxy .glb library
 ```
 
-- **Tests** live in `src/__tests__/` and run on CRA's bundled Jest 27 (`npm test` for watch mode, `npm run test:ci` for one shot). They cover the `.myo` envelope mapping, the parser's flag/poseNote post-processing (Anthropic API mocked via `global.fetch`), the `sceneStore` `setField` path machinery, and poses.json ↔ `public/assets/poses/*.glb` consistency. Three gates now: `npx tsc --noEmit`, `npm run test:ci`, `npm run build`.
+- **Tests** live in `src/__tests__/` and run on CRA's bundled Jest 27 (`npm test` for watch mode, `npm run test:ci` for one shot). They cover the `.myo` envelope mapping, the parser's flag/poseNote post-processing (Anthropic API mocked via `global.fetch`), the `sceneStore` `setField` path machinery, and poses.json / props.json ↔ `public/assets/*/**.glb` consistency (both directions for props — an unregistered `.glb` is invisible to the panel and parser). Three gates now: `npx tsc --noEmit`, `npm run test:ci`, `npm run build`. Note `npx jest` directly does **not** work — the Jest config lives inside `react-scripts`.
   - Test files must stay under `src/` (CRA's Jest roots); they may `require()` the CommonJS `server/*` modules directly. Shared fixtures live in `src/testUtils/` — anything inside a `__tests__/` dir is treated as a suite.
   - `src/setupTests.ts` backfills `structuredClone` (Jest 27's jsdom predates it) — sceneStore tests break without it.
   - Viewport.tsx is deliberately untested (Three.js/WebGL doesn't run under jsdom).
@@ -57,11 +58,15 @@ Every character/prop holds a `mesh` reference: `{kind:'primitive', shape, dimens
 
 **A pose is a mesh, not a field** (PRD §11 v1.2): `/assets/poses/sitting.glb` *is* the sitting pose. There is no `pose` field anywhere. `src/poses.json` is the single source of truth for the pose library — `PropertiesPanel` imports it, `server/parser.js` `require`s it. Adding a pose = add a row to the generator's `POSES` table, re-run the generator, add a row to `poses.json`. No viewport code exists to touch. The parser's unmatched-posture flag (`characters[i].poseNote` in `flaggedParams`) is computed then **stripped** before the scene is built — `poseNote` never reaches the scene model or disk.
 
+**A prop type is also a mesh** (PRD §11 v1.3): same pattern, same reasons — `/assets/props/sofa.glb` *is* the sofa, `src/props.json` is the single source of truth, `scripts/generate-prop-glbs.mjs` generates the library. There is no `propType` field. Two differences from poses: proxy geometry must sit on the floor itself (the renderer lifts primitives by half their extent, but never lifts a glTF group — `window` is the deliberate exception, its origin is the frame bottom so `position.y` is sill height), and there is **no `propNote` flag** — an unmatched prop falls back to a primitive, which is honest rather than ambiguous. Proxies face +Z and are life-sized, so `scale` stays 1.
+
+**Colour is render-time, never scene state** (PRD §11 v1.4): `src/palette.ts` holds two five-value grey ramps — warm for characters, cool for props — and `Viewport.tsx` assigns by the object's **index in the scene array** (not a filtered counter; hiding one object must not re-colour the others). There is no colour field on `Character` or `Prop` and the `.myo` envelope knows nothing about this. `buildObject()` re-materials library glTFs (paths in `poses.json`/`props.json`) from the palette but leaves any other `.glb` with its own materials — that exemption is the hook for user-supplied assets. The colours baked into the generator scripts are fallbacks only, visible just outside the app.
+
 ### Scene-model conventions
 
 - **Positions are base-anchored**: `position.y` is where the object touches the floor, not its center. The renderer lifts primitives by half their vertical extent. If parsed props look floating or double-sized, check for center-anchored y or dimensions duplicated into `scale` (a real bug pattern seen in early fixture data — STATE.md Milestone 3).
 - `Character.scale` is a single number; `Prop.scale` is a Vec3. Asymmetric on purpose (parser prompt matches); don't "unify" it casually.
-- Prop meshes are always primitives — the parser is forbidden to emit `kind:'gltf'` for props; that variant is for hand-attached assets and character poses.
+- Prop meshes prefer a **library proxy** from `src/props.json` and fall back to a primitive when nothing fits (PRD §11 v1.3). The parser must never invent a glTF path outside the library.
 - Old `.myo` files may lack `environment.setting` — `isExterior()` in Viewport.tsx falls back to sniffing `locationName`. No migration; keep the fallback.
 
 ### Rendering scope is governed, not open

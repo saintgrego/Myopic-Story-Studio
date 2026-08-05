@@ -7,32 +7,18 @@
 // Re-run after editing a pose; the app picks up the new file on next scene load.
 
 import * as THREE from 'three';
-import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-// GLTFExporter's binary path runs a Blob through FileReader, which Node lacks.
-globalThis.FileReader = class {
-  readAsArrayBuffer(blob) {
-    blob.arrayBuffer().then((buf) => {
-      this.result = buf;
-      this.onloadend?.();
-      this.onload?.();
-    });
-  }
-  readAsDataURL(blob) {
-    blob.arrayBuffer().then((buf) => {
-      this.result = 'data:application/octet-stream;base64,' + Buffer.from(buf).toString('base64');
-      this.onloadend?.();
-      this.onload?.();
-    });
-  }
-};
+import { writeGlb } from './lib/glb.mjs';
 
 const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'assets', 'poses');
 
-const BODY = new THREE.MeshStandardMaterial({ color: 0x6ea8ff, roughness: 0.8 });
+// FALLBACK COLOUR ONLY (v1.4). The renderer re-materials every library proxy
+// from src/palette.ts at load time, cycling the warm-grey ramp by character
+// index, so this value is what you see only if the .glb is opened outside the
+// app. It is WARM_GREYS[2], the middle of that ramp — keep them in step.
+const BODY = new THREE.MeshStandardMaterial({ color: 0xc6bcb3, roughness: 0.8 });
 
 // All pivots follow the same convention: a group sits at the joint, its capsule
 // hangs below it (mesh offset -h/2), so rotating the group bends at the joint.
@@ -113,21 +99,6 @@ const POSES = {
 };
 
 mkdirSync(OUT_DIR, { recursive: true });
-const exporter = new GLTFExporter();
 for (const [name, pose] of Object.entries(POSES)) {
-  const scene = new THREE.Scene();
-  scene.add(buildFigure(pose));
-  await new Promise((resolve, reject) => {
-    exporter.parse(
-      scene,
-      (glb) => {
-        const file = join(OUT_DIR, `${name}.glb`);
-        writeFileSync(file, Buffer.from(glb));
-        console.log(`wrote ${file} (${glb.byteLength} bytes)`);
-        resolve();
-      },
-      reject,
-      { binary: true },
-    );
-  });
+  await writeGlb(buildFigure(pose), join(OUT_DIR, `${name}.glb`));
 }
