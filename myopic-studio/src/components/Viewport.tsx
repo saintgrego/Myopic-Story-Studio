@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { useSceneStore } from '../store/sceneStore';
-import type { Environment, MeshRef } from '../types/scene';
+import type { Character, Environment, MeshRef, SceneFile } from '../types/scene';
 
 // Full-frame-equivalent sensor width used to derive FOV from a real-world focal length.
 const SENSOR_WIDTH_MM = 36;
@@ -134,6 +134,37 @@ function verticalHalfExtent(shape: string, dims: number[]): number {
     default:
       return (dims[1] ?? 1.8) / 2;
   }
+}
+
+// Where the shot camera aims when no focus subject is set: centre stage, a metre up.
+// Scenes authored before focusSubjectId drove the camera were all framed against this.
+const DEFAULT_AIM = new THREE.Vector3(0, 1, 0);
+
+// Posed .glb figures have no synchronously-known bounds — GLTFLoader is still in
+// flight when the camera is positioned — so aim at a nominal human mid-height.
+const NOMINAL_FIGURE_MID_HEIGHT = 0.9;
+
+// Characters are base-anchored (position.y is floor contact), so the aim point is
+// the figure's mid-height above that: its geometric centre for a primitive.
+function aimPointForCharacter(char: Character): THREE.Vector3 {
+  const midHeight =
+    char.mesh.kind === 'primitive'
+      ? verticalHalfExtent(char.mesh.shape, char.mesh.dimensions)
+      : NOMINAL_FIGURE_MID_HEIGHT;
+  return new THREE.Vector3(
+    num(char.position.x, 0),
+    num(char.position.y, 0) + midHeight * (char.scale || 1),
+    num(char.position.z, 0),
+  );
+}
+
+// focusSubjectId aims the shot camera. An unset, unknown, or hidden subject falls
+// back to centre stage rather than leaving the camera pointed at nothing.
+function cameraAimPoint(scene: SceneFile): THREE.Vector3 {
+  const { focusSubjectId } = scene.camera;
+  if (!focusSubjectId) return DEFAULT_AIM.clone();
+  const subject = scene.characters.find((c) => c.id === focusSubjectId && c.visible);
+  return subject ? aimPointForCharacter(subject) : DEFAULT_AIM.clone();
 }
 
 function buildPrimitiveGeometry(shape: string, dims: number[]): THREE.BufferGeometry {
@@ -423,7 +454,7 @@ export default function Viewport() {
       num(scene.camera.position.y, 1.6),
       num(scene.camera.position.z, 4),
     );
-    sceneCamera.lookAt(0, 1, 0);
+    sceneCamera.lookAt(cameraAimPoint(scene));
     sceneCamera.updateProjectionMatrix();
 
     const helper = new THREE.CameraHelper(sceneCamera);

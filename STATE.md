@@ -576,3 +576,46 @@ rendering code.
   overwrite by `sceneId`) has the real values and `flagged_params: []`.
 - Browser-automation note reconfirmed: the save button reads `Save .myo *` when dirty —
   match button text with `startsWith('Save .myo')`, not equality.
+
+## focusSubjectId aims the shot camera (2026-08-05): DONE, verified in-browser
+
+- Gap found while answering "how do I set specific camera distances and lenses": the shot
+  camera was hardcoded to `lookAt(0, 1, 0)`, so `camera.focusSubjectId` was inert — the
+  dropdown in the Camera panel wrote a value that nothing read. A character placed away
+  from the origin drifted off-centre (or out of frame on a long lens) with no way to aim at
+  them except hand-solving `camera.position`.
+- Fix in `Viewport.tsx`: `cameraAimPoint(scene)` resolves `focusSubjectId` against
+  `scene.characters` and returns the subject's aim point; `sceneCamera.lookAt()` takes that
+  instead of the literal. Unset, unknown, or hidden subject falls back to `DEFAULT_AIM`
+  `(0,1,0)` — the exact old value, so every pre-existing scene frames identically.
+- Aim height respects the base-anchored convention: `position.y + midHeight * scale`, where
+  `midHeight` is `verticalHalfExtent()` for a primitive (0.9 for the standard 1.8m capsule,
+  which is why the old hardcoded 1.0 looked roughly right) and a nominal 0.9 for a `gltf`
+  mesh. **The nominal is not laziness** — `GLTFLoader` is still in flight when the camera is
+  positioned in the same effect, so a posed figure's real bounds aren't knowable
+  synchronously. Measuring them would mean re-aiming on load callback; not worth it while
+  every pose in the library is a roughly human-height mannequin.
+- Only the shot camera changed. The key/rim lights still `lookAt(0, 1, 0)` deliberately —
+  they're direction-only, and re-aiming them at the subject would move every shadow in the
+  scene as a side effect of a camera setting.
+- Evidence (scene `d330bdf7` "Distant Figure at Sunset": subject at x=2 z=-10, camera at
+  z=5, 35mm, 2.39:1): before, the figure sat high and right of frame; after, dead centre.
+  Numerically the subject's NDC goes (0.260, 0.339) → (0.000, 0.000). Regression-checked
+  `62a26f9c` (null focus — unchanged, both detectives framed as before) and `4f4fefce`
+  (focus on a `sitting.glb` — exercises the gltf nominal, renders centred).
+- Gates: `tsc --noEmit` clean, `test:ci` 28/28, `npm run build` compiled. No new tests —
+  the logic lives in `Viewport.tsx`, which stays deliberately untested (WebGL under jsdom).
+- Not touched, and deliberately: `camera.depthOfField` stays stored metadata. PRD §11's
+  out-list names depth of field as a rendered effect explicitly ("the f-stop stays what it
+  is today"), so wiring it to anything needs an amendment logged first.
+
+### Rules worth remembering
+
+- **CRA dev server won't start in this container without `DANGEROUSLY_DISABLE_HOST_CHECK=true`.**
+  It dies with `options.allowedHosts[0] should be a non-empty string`. Cause: `package.json`
+  has a `proxy` field, so CRA enables the host check and passes `urls.lanUrlForConfig` as the
+  sole allowed host — and that resolves to `undefined` on a box with no LAN address. Setting
+  `HOST` alone does not fix it. Environment quirk, not a repo bug; don't "fix" it in config.
+- `npx tsc` fetches a *modern* TypeScript when `node_modules` is absent and then fails on
+  `moduleResolution=node10` deprecation — which looks like a real typecheck error but isn't.
+  Run `npm install` first and use `./node_modules/.bin/tsc` to get the pinned 4.9.5.
