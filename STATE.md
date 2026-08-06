@@ -619,3 +619,55 @@ rendering code.
 - `npx tsc` fetches a *modern* TypeScript when `node_modules` is absent and then fails on
   `moduleResolution=node10` deprecation — which looks like a real typecheck error but isn't.
   Run `npm install` first and use `./node_modules/.bin/tsc` to get the pinned 4.9.5.
+
+## Depth-of-field focus readout (2026-08-05): DONE, PRD §11 amended to v1.3 first
+
+- **Amendment before code, per §11.** `depthOfField` was the last inert camera field. The
+  owner approved v1.3 — depth of field as *computed information* (numbers + ground markers),
+  with rendered blur still barred. The out-list line was narrowed, not deleted: its
+  parenthetical now scopes the prohibition to shading. Two owner decisions differed from the
+  first draft and the amendment was rewritten before being applied: **plane markers are in**
+  (drafted as optional), and **flagged inputs still compute** from fallbacks, labelled
+  provisional (drafted as showing "—").
+- **New: `src/lib/framing.ts` and `src/lib/dof.ts`.** The aim-point maths moved out of
+  `Viewport.tsx` — the panel needs the same subject distance the camera uses, and anything
+  left inside Viewport is untestable by construction (no WebGL under jsdom). `framing.ts`
+  holds `num`, `verticalHalfExtent`, `cameraAimPoint`, `cameraPosition`, `subjectDistance`,
+  `hasResolvedFocusSubject`; Viewport imports them and wraps in `THREE.Vector3`.
+- **Test count 28 → 61.** Extracting the maths is what made it testable: `dof.test.ts` covers
+  the range arithmetic, the hyperfocal → infinity transition, the null-for-impossible-inputs
+  contract, and formatting; `framing.test.ts` covers the aim point (primitive vs gltf, scale,
+  raised base, all three fallback paths, flagged components) — logic that shipped untested in
+  the previous milestone because it lived in Viewport.
+- **`resolveFocusInputs()` exists for testability, not tidiness.** The provisional decision
+  was originally inline in the panel, which can't be tested (no React Testing Library in this
+  repo — CRA's template deps were never added). Pulling it into `dof.ts` is what let the
+  flagged-input behaviour be covered at all.
+- **Circle of confusion is fixed at 0.03mm**, the full-frame convention matching the existing
+  `SENSOR_WIDTH_MM = 36`. Deliberately not a tunable — a "sharpness" slider is a finishing
+  control and §11 bars those.
+- **`FALLBACK_F_STOP = 2.8` is new state, unlike the 50mm lens fallback.** The viewport
+  already had a focal-length default because it renders FOV; it never read `depthOfField`, so
+  there was nothing to inherit. Recorded in the amendment rather than buried in the constant.
+- **`disposeObject3D` now disposes `THREE.Line` as well as `THREE.Mesh`.** The markers are
+  Lines, and the old mesh-only check would have leaked geometry and material on every scene
+  rebuild. Easy to miss: the leak is silent.
+- Evidence (in-browser, both cases screenshotted):
+  - `62a26f9c` "Two Detectives", 35mm f/2.8, no focus subject → measured 4.04m to centre
+    stage, in focus 3.17–5.58m, depth 2.41m, hyperfocal 14.62m; both ground markers draw.
+  - `d330bdf7` "Distant Figure at Sunset", 35mm f/8, focus `char_01` at 15.15m — past the
+    5.14m hyperfocal → reads `3.82 m – ∞`, depth `∞`, and **only the near marker draws**.
+- Gates: `tsc --noEmit` clean, `test:ci` 61/61, `npm run build` compiled.
+
+### Rules worth remembering
+
+- **The provisional readout state has no in-app repro.** No fixture scene carries a flagged
+  lens or stop, and manufacturing one means either a live parse (needs `ANTHROPIC_API_KEY`)
+  or hand-editing a `.myo` — which is the user's data. It is covered by unit test, not by
+  screenshot. Same will be true of any future flagged-value UI: check whether a fixture can
+  even reach the state before promising visual evidence.
+- **Marker geometry is a plane-ground intersection, not a point.** The focus plane is
+  perpendicular to the *view axis*, so on a tilted camera its ground line is offset from the
+  naive "walk along the floor" position. The code crosses the view direction with world up to
+  get the line direction, then walks the in-plane vertical to `y = 0`. Degenerate when the
+  camera looks straight down — guarded, returns no markers.
