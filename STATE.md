@@ -671,3 +671,49 @@ rendering code.
   naive "walk along the floor" position. The code crosses the view direction with world up to
   get the line direction, then walks the in-plane vertical to `y = 0`. Degenerate when the
   camera looks straight down — guarded, returns no markers.
+
+## CI on GitHub Actions (2026-08-05): LIVE, main green
+
+The three gates are no longer honour-system. `.github/workflows/ci.yml` runs
+`npm ci` → `tsc --noEmit` → `test:ci` → `build` on every pull request and every push to
+`main`. Before this the repo had **zero** workflows — the gates only ran when someone
+remembered to run them.
+
+**First real results** (all on Node 22, `ubuntu-latest`):
+
+| ref | commit | result |
+| --- | --- | --- |
+| PR #2 (the workflow itself) | `f660119` | green, 58s |
+| PR #1 after base merge | `4dc501b` | green, 60s |
+| PR #3 after base merge | `a7fbb1b` | green, 58s |
+| `main` after all merges | `d4979cb` | green — install 13s, typecheck 3s, tests 2s, build 19s |
+
+`main` is `d4979cb` with all three PRs merged and 61 tests passing under CI.
+
+### Rules worth remembering
+
+- **`npm ci` was broken repo-wide before this** — the lockfile was missing `yaml@2.9.0`, an
+  optional peer of tailwindcss that npm resolves but had never been written back. Any CI
+  anyone added would have died at the install step, before a single gate ran. Fixed in the
+  same PR as the workflow. The drift had been noticed *earlier the same session and dismissed
+  as incidental noise*; it wasn't. Treat an unexplained `package-lock.json` diff as a
+  question, not as churn — `npm ci` is the check that settles it (`npm install` papers over
+  it by definition).
+- **`concurrency: cancel-in-progress` means intermediate merge commits can end with no
+  completed run.** Merging #3 forty seconds after #1 cancelled the `main` run for #1's merge
+  commit (`20daf77`, run #5) mid-flight. Not a failure and not a coverage gap here — #3's
+  tree contains #1's changes, so the next run covered both — but on a chain of rapid merges,
+  "cancelled" on an intermediate commit is expected, not alarming.
+- **Squash-merging a PR that another PR is stacked on will wreck the stack.** #2 was squashed
+  safely (nothing branched from it), but #1 was merged with a **merge commit** on purpose:
+  #3's branch contained #1's commits, and squashing would have put differently-SHA'd copies
+  of the same changes on `main`, making #3's diff re-contain #1's work and likely conflict.
+  Preserve commits when something is stacked; squash only leaf PRs.
+- **GitHub only auto-retargets a stacked PR when the base branch is deleted.** After #1
+  merged, #3 still pointed at `claude/push-file-u861cy` — merging it there would have landed
+  the work on a stale branch instead of `main`. The base had to be repointed at `main`
+  explicitly, after which the diff was verified to contain only #3's own eight files.
+- **CI enforces lint, via the build.** Actions sets `CI=true`, which makes `react-scripts
+  build` treat ESLint warnings as errors. There is no separate lint script, so the build step
+  *is* the lint gate — verify `CI=true npm run build` locally before pushing, since a plain
+  local `npm run build` will not reproduce it.
