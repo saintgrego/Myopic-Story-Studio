@@ -717,3 +717,88 @@ remembered to run them.
   build` treat ESLint warnings as errors. There is no separate lint script, so the build step
   *is* the lint gate — verify `CI=true npm run build` locally before pushing, since a plain
   local `npm run build` will not reproduce it.
+
+## Pose mannequin facial landmarks (2026-08-07): DONE
+
+Static brow ridge, nose and cheekbones on the pose mannequin heads. Content change only —
+`scripts/generate-pose-glbs.mjs` and the three regenerated `.glb` files are the entire diff.
+`src/types/scene.ts`, `Viewport.tsx` and `server/parser.js` were **not touched**, confirmed
+against `git status`; this is PRD §11 v1.2's "growing the library is editing its table and
+re-running it," not a new capability.
+
+- **`buildHead()`** returns a Group in a head-local frame: skull sphere (unchanged radius
+  0.11 and `BODY` material), brow slab, nose cone along +Z, two mirrored cheek facets. It is
+  **orientation-free on purpose** — a new `neck` Group at y=0.72 carries `pose.headTilt ?? 0`,
+  so every pose reuses one head geometry and tilt stays a pose property. No pose sets
+  `headTilt` yet; the crouch's head angle still comes from `torsoBend`, exactly as before.
+- **Scope:** this is fixed geometry, not expression. No morph targets, no blend shapes,
+  nothing that can articulate at runtime — non-goal #7 is untouched.
+- **Naming:** meshes now carry names (`skull`, `brow`, `nose`, `cheekL/R`, `torso`,
+  `upperArmL/R`, `foreArmL/R`, `thighL/R`, `shinL/R`, `footL/R`). glTF export **strips
+  punctuation** from node names — `cheek.L` came back as `cheekL`, which is why the names
+  have no dots. Names are what make an exported pose inspectable part-by-part; the clearance
+  check below depends on them.
+- **`castShadow`/`receiveShadow` on the landmark meshes are cosmetic in the asset** — glTF
+  carries no shadow flags, so they are dropped at export and `Viewport.tsx`'s loader traverse
+  is what actually sets them at runtime. Set anyway so an in-process preview shadows the way
+  the app does.
+
+### Evidence
+
+- **All three outputs valid glTF v2** via `file`: standing 94,148 B, sitting 94,596 B,
+  crouching 94,868 B (~94 KB each, up from ~86 KB).
+- **Clearance check** (scratch script, loads the *exported* `.glb`, per-vertex closest-point
+  distance to every other mesh's triangles plus an odd-crossing containment test): **no
+  landmark intersects anything in any pose.** Crouching is the tightest, as expected from the
+  hunched neck angle, and still clears: skull→shoulder **13.7 cm**, cheek→shoulder 17.3 cm
+  (standing 14.7/19.9, sitting 14.6/18.8). The one reported intersection, skull∩torso, is
+  **pre-existing and by design** — the head sphere at y=0.72 r=0.11 has always overlapped the
+  torso capsule's top cap (centre y=0.5, r=0.15) by 4 cm, since there is no neck mesh. Neither
+  moved in this change.
+  - Gotcha for anyone rerunning that check: `THREE.Triangle.closestPointToPoint` returns
+    **NaN on the zero-area triangles at capsule and sphere poles**, which silently poisons a
+    running `Math.min`. Filter by `getArea() > 1e-12` first.
+- **Contact sheet** (¾ figure / ¾ head / front head / ¾ silhouette × three poses, offscreen
+  Three.js in headless Chromium): landmarks read as three distinct features, not noise. Took
+  **three tuning passes** to get there — the first two builds put the brow at 12.5 cm wide
+  protruding ~27 mm at the corners, which rendered as a *visor*, and cheek slabs that broke
+  the head silhouette like fins. Final: brow 0.085×0.02×0.034, cheeks 0.046×0.013×0.04 pulled
+  in to x=±0.044. **A straight box across a sphere either protrudes at its corners or sinks
+  at its centre** — that trade is the whole tuning problem, and the silhouette column is what
+  exposes it. Judge these by render, not arithmetic.
+- **In the real viewport**, scratch scene with the three poses (deleted afterwards, as with
+  the original pose smoke test), key azimuth swept via the Lighting panel's own field:
+  - Group frame at az 35° / 145° / 250°: landmarks visible at figure distance; at 250° the
+    key is behind the figures and the faces fall to fill level, with the nose catching the
+    only edge light.
+  - Head frame at az 330° vs 60°: **the planes flip which side is lit.** At 330° the brow's
+    top face is bright with a hard cast band under it, the camera-left cheek facet reads
+    bright against a dark camera-right one, and the nose's left plane is lit. At 60° all
+    three invert. That directional read is the point of the change — a bare sphere had none.
+
+### Landmines hit while verifying (all environmental, none in the app)
+
+- **`npm run dev` cannot start the CRA half in this container.** react-scripts 5 builds
+  `allowedHosts: [urls.lanUrlForConfig]`, and with no LAN IP that array is `[undefined]`,
+  which fails webpack-dev-server's schema: *"options.allowedHosts[0] should be a non-empty
+  string."* `HOST=localhost` does **not** fix it. Use
+  `DANGEROUSLY_DISABLE_HOST_CHECK=true BROWSER=none npm start` alongside a separately
+  started `node server/index.js`. The backend half of `npm run dev` is fine.
+- **Framing a head in the shot camera is constrained by the aim point.** With no
+  `focusSubjectId` the camera aims at `DEFAULT_AIM` (0,1,0) and with one it aims at the
+  figure's *mid-height*, so neither points at a 1.55 m head: at 50 mm and 2 m the frame
+  simply does not reach it. The trick that worked was scaling the character to 0.62 so its
+  head sits at the aim point.
+- Three gates re-run clean after the change: `npx tsc --noEmit`, `npm run test:ci` (61
+  passing, `poses.test.ts` still ties `poses.json` to real files), `npm run build`.
+
+### Raised the same day, deliberately not built
+
+The owner supplied a reference render of a sculpted anatomical base mesh (Daz/MakeHuman
+class) with *"I need at least this level of realism."* That is an asset-class change, not a
+tuning problem — no arrangement of primitives in the generator reaches it. It needs **no app
+code** (PRD §4; §11 v1.2 already anticipates a Mixamo/MakeHuman figure dropping into the same
+folder), but it does need a licensed base mesh, a rig and a DCC tool to pose it, and an
+owner decision that PRD §9 item 1 explicitly reserves. Written up, with a ready-to-adopt
+§11 amendment draft, in **`docs/proposal-realistic-figure-assets.md`**. `PRD.md` was left
+untouched on purpose. Owner's call: **log it, don't build yet.**

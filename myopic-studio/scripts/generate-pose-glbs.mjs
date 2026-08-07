@@ -37,13 +37,72 @@ const BODY = new THREE.MeshStandardMaterial({ color: 0x6ea8ff, roughness: 0.8 })
 // All pivots follow the same convention: a group sits at the joint, its capsule
 // hangs below it (mesh offset -h/2), so rotating the group bends at the joint.
 // Figure faces +Z (the nose marker shows it); base of the feet at y = 0.
-function limb(radius, length) {
+// `name` rides on the mesh, not the group: glTF export keeps mesh node names (minus any
+// punctuation) and that is what makes an exported pose inspectable part-by-part.
+function limb(radius, length, name) {
   const h = length + 2 * radius; // CapsuleGeometry total height
   const group = new THREE.Group();
   const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(radius, length), BODY);
   mesh.position.y = -h / 2;
+  mesh.name = name;
   group.add(mesh);
   return { group, h };
+}
+
+// Static facial landmarks: brow ridge, nose, cheekbones. Structural geometry only —
+// no morphs, no blend shapes, nothing that can articulate at runtime (PRD section 2
+// non-goal #7 still bars expressions; this is the same category as the nose marker it
+// replaces, just readable enough to show which way a shading plane turns).
+//
+// Local frame: skull centre at the group origin, face toward +Z (the figure convention).
+// Head TILT is deliberately NOT applied here — the caller's neck joint owns it, so the
+// same geometry is reused unmodified by every pose.
+const SKULL_RADIUS = 0.11;
+
+// glTF carries no shadow flags, so these are dropped at export and the viewport's loader
+// traverse is what actually applies them at runtime. Set anyway to match the convention
+// every other bit of pose geometry is rendered under, and so an in-process preview of
+// this scene (the contact-sheet harness) shadows the same way the app does.
+function shadowed(mesh) {
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+function buildHead() {
+  const head = new THREE.Group();
+  head.name = 'head';
+
+  const skull = shadowed(new THREE.Mesh(new THREE.SphereGeometry(SKULL_RADIUS, 16, 12), BODY));
+  skull.name = 'skull';
+  head.add(skull);
+
+  // Brow ridge: shallow slab across the eye line, front edge angled down toward the nose.
+  const brow = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.02, 0.034), BODY));
+  brow.position.set(0, 0.034, 0.091);
+  brow.rotation.x = 0.32;
+  brow.name = 'brow';
+  head.add(brow);
+
+  // Nose: cone stub along +Z (cones point +Y, so the extra rotation past a quarter turn
+  // is what droops the tip). Sits where the old box nose marker did.
+  const nose = shadowed(new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.085, 8), BODY));
+  nose.position.set(0, -0.008, 0.104);
+  nose.rotation.x = Math.PI / 2 + 0.18;
+  nose.name = 'nose';
+  head.add(nose);
+
+  // Cheekbones: thin facets mirrored either side of the nose, each turned to face
+  // up/out/forward so a moving key sweeps across them at a different rate than the skull.
+  for (const side of [-1, 1]) {
+    const cheek = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.013, 0.04), BODY));
+    cheek.position.set(side * 0.044, -0.02, 0.085);
+    cheek.rotation.set(0.28, side * -0.35, side * -0.4);
+    cheek.name = side < 0 ? 'cheekL' : 'cheekR';
+    head.add(cheek);
+  }
+
+  return head;
 }
 
 // pose: rotations in radians. hipY sets pelvis height (bend knees to keep feet grounded).
@@ -61,39 +120,43 @@ function buildFigure(pose) {
   hips.add(torsoGroup);
 
   const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.35), BODY);
+  torso.name = 'torso';
   torso.position.y = 0.325; // capsule center: hips at its base
   torsoGroup.add(torso);
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 12), BODY);
-  head.position.y = 0.72;
-  torsoGroup.add(head);
-  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.06), BODY);
-  nose.position.set(0, 0.72, 0.12); // faces +Z
-  torsoGroup.add(nose);
+  // Neck joint: same pivot convention as the limbs. Its rotation is the ONLY head tilt —
+  // buildHead() is orientation-free, so every pose shares one head geometry.
+  const neck = new THREE.Group();
+  neck.position.y = 0.72;
+  neck.rotation.x = pose.headTilt ?? 0;
+  neck.add(buildHead());
+  torsoGroup.add(neck);
 
   for (const side of [-1, 1]) {
-    const upper = limb(0.05, 0.18);
+    const suffix = side < 0 ? 'L' : 'R';
+    const upper = limb(0.05, 0.18, `upperArm${suffix}`);
     upper.group.position.set(side * 0.21, 0.55, 0);
     upper.group.rotation.x = pose.armForward ?? 0;
     upper.group.rotation.z = side * (pose.armOut ?? 0.08);
     torsoGroup.add(upper.group);
 
-    const lower = limb(0.045, 0.16);
+    const lower = limb(0.045, 0.16, `foreArm${suffix}`);
     lower.group.position.y = -upper.h;
     lower.group.rotation.x = pose.elbowBend ?? 0;
     upper.group.add(lower.group);
 
-    const thigh = limb(0.07, 0.24);
+    const thigh = limb(0.07, 0.24, `thigh${suffix}`);
     thigh.group.position.set(side * 0.09, 0, 0);
     thigh.group.rotation.x = pose.thighForward ?? 0;
     hips.add(thigh.group);
 
-    const shin = limb(0.06, 0.22);
+    const shin = limb(0.06, 0.22, `shin${suffix}`);
     shin.group.position.y = -thigh.h;
     shin.group.rotation.x = pose.kneeBend ?? 0;
     thigh.group.add(shin.group);
 
     const foot = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.22), BODY);
+    foot.name = `foot${suffix}`;
     foot.position.set(0, -shin.h - 0.025, 0.05);
     shin.group.add(foot);
   }
