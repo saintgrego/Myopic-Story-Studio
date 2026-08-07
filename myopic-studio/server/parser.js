@@ -41,7 +41,7 @@ Return ONLY valid JSON — no markdown, no explanation, no code fences. The JSON
     "angle": "Eye Level"|"Low"|"High"|"Dutch"|"Bird's Eye"|"Worm's Eye"|"[?]",
     "focalLength": number | "[?]",        // mm, prefer common values: 18/35/50/85/135/200
     "depthOfField": number | "[?]",       // f-stop equivalent e.g. 2.8
-    "focusSubjectId": string | null,      // character id if focus is explicit
+    "focusSubjectId": string | null,      // id of the character the shot is about — see Rules
     "position": { "x": number | "[?]", "y": number | "[?]", "z": number | "[?]" },
     "movement": "Static"|"Pan"|"Tilt"|"Dolly"|"Crane"|"Handheld"|"[?]",
     "aspectRatio": "16:9"|"2.39:1"|"4:3"|"1:1"|"[?]"
@@ -84,6 +84,7 @@ ${POSE_LIST}
   ("hunches over a terminal" → crouching; "seated by the window" → sitting; "stands at the door" → standing.)
 - When NO posture is stated or implied, the character mesh defaults to the neutral capsule: {"kind":"primitive","shape":"capsule","dimensions":[0.4,1.8]} (radius, height in metres). Absence of posture is normal — do NOT flag it, do NOT guess standing.
 - When a posture IS described but none of the pose meshes fits (lying down, climbing, a handstand), pick the closest pose mesh AND add "poseNote": "[?]" to that character so the mismatch is flagged for review. Never add "poseNote" in any other case.
+- Focus subject: whenever the scene has ANY characters, set "focusSubjectId" to the id of the one the shot is actually about — the character named first, or the one the described action centres on. It must be one of the character ids you emitted. Use null ONLY when there are no characters at all. This value aims the camera, so a wrong id points the shot at the wrong person. Never emit "[?]" here: it is a real id or it is null.
 - Prop mesh: choose whichever primitive shape (box/sphere/cylinder/cone/capsule) best approximates the described object's silhouette, with plausible dimensions in metres.
 - rotation defaults to {"x":0,"y":0,"z":0} unless a facing direction is explicit or strongly implied by the prompt.
 - Return an empty array if no characters or props are present.
@@ -158,6 +159,16 @@ async function parsePromptToScene(prompt) {
   const flaggedParams = collectFlaggedPaths(parsed);
   for (const char of parsed.characters ?? []) delete char.poseNote;
 
+  // The prompt asks for a focusSubjectId whenever characters exist, but the model can
+  // still name one that was never emitted. An unknown id silently falls back to centre
+  // stage in the viewport and shows a value the panel's dropdown cannot offer, so drop
+  // it here rather than storing a reference that points at nothing.
+  const camera = parsed.camera ?? {};
+  if (camera.focusSubjectId != null) {
+    const known = (parsed.characters ?? []).some((c) => c.id === camera.focusSubjectId);
+    if (!known) camera.focusSubjectId = null;
+  }
+
   const scene = {
     sceneId: randomUUID(),
     title: parsed.title ?? 'Untitled Scene',
@@ -165,7 +176,7 @@ async function parsePromptToScene(prompt) {
     prompt,
     environment: parsed.environment,
     lighting: parsed.lighting,
-    camera: parsed.camera,
+    camera,
     characters: parsed.characters ?? [],
     props: parsed.props ?? [],
     storyboardNotes: parsed.storyboardNotes ?? '',
