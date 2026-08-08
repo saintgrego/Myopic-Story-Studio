@@ -23,7 +23,6 @@ import type {
 } from '../types/scene';
 import {
   CheckboxField,
-  ColorField,
   inputClass,
   NumberField,
   PanelSection,
@@ -31,6 +30,7 @@ import {
   SelectField,
   TextField,
 } from './fields';
+import KelvinGelControl from './KelvinGelControl';
 import POSES from '../poses.json';
 import PROPS from '../props.json';
 
@@ -315,10 +315,10 @@ export default function PropertiesPanel() {
           max={90}
           onChange={(v) => setField(['lighting', 'keyLightElevation'], v)}
         />
-        <ColorField
+        <KelvinGelControl
           label="Key Color"
+          path={['lighting', 'keyLightColor']}
           value={lighting.keyLightColor}
-          onChange={(v) => setField(['lighting', 'keyLightColor'], v)}
         />
         <NumberField
           label="Fill Intensity"
@@ -327,6 +327,11 @@ export default function PropertiesPanel() {
           max={1}
           step={0.05}
           onChange={(v) => setField(['lighting', 'fillIntensity'], v)}
+        />
+        <KelvinGelControl
+          label="Fill Color"
+          path={['lighting', 'fillColor']}
+          value={lighting.fillColor}
         />
         <CheckboxField
           label="Rim Light"
@@ -340,6 +345,11 @@ export default function PropertiesPanel() {
           max={1}
           step={0.05}
           onChange={(v) => setField(['lighting', 'rimIntensity'], v)}
+        />
+        <KelvinGelControl
+          label="Rim Color"
+          path={['lighting', 'rimColor']}
+          value={lighting.rimColor}
         />
         <NumberField
           label="Shadow Softness"

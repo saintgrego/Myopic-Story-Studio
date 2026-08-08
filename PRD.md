@@ -79,7 +79,7 @@ The renderer asks each object what mesh it wants and renders accordingly. **Prim
 Carry the parameter definitions forward from `myopic-3d-studio.md` sections 3.1–3.5, with these V1 amendments:
 
 - **Environment:** location name, **setting (`Interior` | `Exterior`, added 31 July 2026)**, time of day, weather/atmosphere. No background asset field (nothing to point it at). `setting` exists because interior/exterior was only ever free text inside the location name, and the renderer has to know it as a fact — a sky must not appear indoors. The parser extracts it from INT./EXT. slugline framing. `.myo` files written before it existed stay loadable: the viewport falls back to sniffing the location name, so no migration is required. `weather` now also drives fog density, not just sky turbidity, so it is worth phrasing precisely ("light mist" and "thick fog" render differently).
-- **Lighting:** scheme, key direction (azimuth/elevation), key colour, fill ratio, rim toggle, shadow softness, mood preset. These map to real Three.js lights.
+- **Lighting:** scheme, key direction (azimuth/elevation), key colour, fill ratio, rim toggle, shadow softness, mood preset, and **fill colour and rim colour (`fillColor` / `rimColor`, added 8 August 2026 — see section 11)**. These map to real Three.js lights. Both new colours default to `#ffffff`, which is cosmetically neutral: `.myo` files written before they existed render identically, so no migration is required — the same backward-compat pattern as `environment.setting`.
 - **Camera:** shot type, angle, focal length (mm), depth of field, focus subject, XYZ position, movement (metadata only), aspect ratio. **The focal length must genuinely drive the Three.js camera FOV.** A 35mm and an 85mm must look different. **Focus subject (v1.2 track) aims the shot camera**, and **depth of field is read by the viewport as of v1.3** — as a computed near/far focus readout and ground-plane markers, never as rendered blur. See section 11.
 - **Characters:** figure ID, position XYZ, rotation, scale, visibility, `mesh` reference. Drop expression and costume — nothing to attach them to. **Posture (v1.2) is not a new field:** a pose is expressed entirely through the existing `mesh` reference — `/assets/poses/sitting.glb` *is* the sitting pose. See section 11 for why.
 - **Props:** prop ID, position, rotation, scale, visibility, `mesh` reference. **The mesh may be a library proxy (v1.4):** `/assets/props/sofa.glb` *is* the sofa, on the same "the mesh is the object type" reasoning as poses. See section 11.
@@ -316,3 +316,13 @@ This replaces the removed non-goal. It is the whole of the standing policy on ho
 - [ ] Hiding a character does not re-colour the ones after it.
 
 **Consequence worth knowing:** the colours baked into the generated `.glb` files are now **fallbacks only** — they are what you see if a proxy is opened outside the app. They are set to the middle value of each ramp; if the palette is retuned, update them to match or accept the drift.
+
+### v1.6 — 8 August 2026: fill and rim colour (gel filters)
+
+**Requested by the owner:** temperature (Kelvin) and gel-filter tints for all three lights, not just key.
+
+**Applying the section 11 test:** colour temperature and tint are already established as blocking information — key colour already drives real shading. Extending that to fill and rim is the same category of decision, just applied to two lights that previously had none. In scope.
+
+**Schema change (section 5):** `Lighting` gains `fillColor` (hex, default `#ffffff`) and `rimColor` (hex, default `#ffffff`). Both are cosmetically neutral by default so every existing `.myo` renders identically until edited — no migration needed, same pattern as `environment.setting`'s backward-compat fallback.
+
+**Not in scope:** anything gels do in real cinematography beyond colour — barn doors, diffusion, cut. Tint only.

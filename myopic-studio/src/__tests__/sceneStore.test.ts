@@ -83,6 +83,26 @@ describe('sceneStore', () => {
     expect(useSceneStore.getState().scene?.flaggedParams).toEqual(['environment.weather']);
   });
 
+  test('setField adds fillColor/rimColor to a scene that lacks them (PRD §11 v1.6)', () => {
+    useSceneStore.getState().loadScene(makeScene());
+    expect(useSceneStore.getState().scene?.lighting.fillColor).toBeUndefined();
+    useSceneStore.getState().setField(['lighting', 'fillColor'], '#a8c8e8');
+    useSceneStore.getState().setField(['lighting', 'rimColor'], '#ffd9a0');
+    const state = useSceneStore.getState();
+    expect(state.scene?.lighting.fillColor).toBe('#a8c8e8');
+    expect(state.scene?.lighting.rimColor).toBe('#ffd9a0');
+    expect(state.dirty).toBe(true);
+  });
+
+  test('setField leaves the other lighting fields alone when writing a gel colour', () => {
+    useSceneStore.getState().loadScene(makeScene());
+    useSceneStore.getState().setField(['lighting', 'fillColor'], '#a8c8e8');
+    const { lighting } = useSceneStore.getState().scene!;
+    expect(lighting.keyLightColor).toBe('#88AAFF');
+    expect(lighting.fillIntensity).toBe(0.2);
+    expect(lighting.rimIntensity).toBe(0.4);
+  });
+
   test('characterIndex and propIndex find by id', () => {
     const scene = makeScene();
     expect(characterIndex(scene, 'char_01')).toBe(0);
