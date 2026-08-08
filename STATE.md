@@ -1350,3 +1350,53 @@ evidence: a flagged (`[?]`) lens or stop still computes a readout, labelled prov
   produces it, capture, delete. The cost is a few minutes; the alternative is a feature that
   ships forever on the strength of a unit test. Do it in a disposable clone, and check
   `git status` afterwards.
+
+## Parser flagging of lens/stop confirmed, and the badge that lied (2026-08-08)
+
+Three owner-run live parses closed the open question from the previous entry — whether a
+real parse ever returns `"[?]"` for a lens or stop — and turned up two findings on the way.
+
+**The question is closed: yes, it flags.** Results:
+
+| prompt | focalLength | depthOfField | focusSubjectId |
+| --- | --- | --- | --- |
+| "A woman waits in a hallway" | 50 | 2.8 | `char_01` |
+| "Two people in a room" | `[?]` | `[?]` | **null** |
+| "A figure in a window at night. I haven't decided on the lens or the stop yet." | `[?]` | `[?]` | `char_01` |
+
+So the provisional readout is reachable in ordinary use, not only via a hand-built probe.
+The third prompt is the useful pattern: saying the decision has not been made gets an honest
+`[?]` rather than an invented lens. Note the first parse returned exactly 50mm / f2.8 — the
+same values as the fallbacks, by coincidence — so that scene would look identical flagged or
+not. Don't use a 50/2.8 scene to test provisional behaviour.
+
+**Finding 1 — the viewport badge asserted a lens the director never chose.** In camera view
+the corner badge rendered `num(focalLength, 50) + "mm"`, so a flagged lens displayed as a
+flat `50mm`, indistinguishable from a real one, while the aspect ratio beside it honestly
+showed `[?]`. That is the one place a director glances while framing, and it contradicted
+the provisional labelling the panel had just been given. Now renders `[?] (50mm)` in amber —
+sentinel first, the fallback actually being rendered in parentheses.
+
+While fixing it, the two `num(scene.camera.focalLength, 50)` literals in the FOV maths were
+replaced with `FALLBACK_FOCAL_LENGTH_MM`. They were a latent divergence: changing the
+constant in `dof.ts` would have moved the readout and the marker positions while leaving the
+rendered FOV at 50.
+
+**Finding 2 — the focus-subject rule holds 2 of 3, and fails where the scene is symmetric.**
+"Two people in a room" produced `char_01` and `char_02` but `focusSubjectId: null`, despite
+the v1.3-era prompt rule requiring a subject whenever characters exist. Two unnamed,
+interchangeable figures with no action to centre on — the model declined to choose.
+**Deliberately not chased.** "No focus subject" is arguably the honest answer for a scene
+with no subject, and tightening the prompt for symmetric two-handers costs complexity for a
+case where the fallback (aim centre stage) is already correct. Recorded as observed model
+behaviour, exactly the prompt-adherence question the previous entry predicted.
+
+### Rules worth remembering
+
+- **Check every place a flagged value can surface, not just the one you built.** The panel
+  readout was carefully labelled provisional on day one; the viewport badge two files away
+  quietly substituted the fallback for months of the same session. Grep for the fallback
+  constant and for `num(` on the flagged field when adding a `[?]`-aware display.
+- **A fallback used in more than one place belongs in a constant, immediately.** The FOV
+  maths and the readout independently hard-coded 50; nothing would have caught the drift
+  because both were individually correct.

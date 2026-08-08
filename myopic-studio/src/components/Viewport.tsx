@@ -495,7 +495,7 @@ export default function Viewport() {
 
     const sceneCamera = sceneCameraRef.current!;
     const aspect = aspectRatioToNumber(scene.camera.aspectRatio === '[?]' ? '16:9' : scene.camera.aspectRatio);
-    sceneCamera.fov = focalLengthToVerticalFov(num(scene.camera.focalLength, 50), aspect);
+    sceneCamera.fov = focalLengthToVerticalFov(num(scene.camera.focalLength, FALLBACK_FOCAL_LENGTH_MM), aspect);
     sceneCamera.aspect = aspect;
     const camPos = cameraPosition(scene);
     sceneCamera.position.set(camPos.x, camPos.y, camPos.z);
@@ -549,7 +549,7 @@ export default function Viewport() {
         scene.camera.aspectRatio === '[?]' ? '16:9' : scene.camera.aspectRatio,
       );
       sceneCamera.aspect = aspect;
-      sceneCamera.fov = focalLengthToVerticalFov(num(scene.camera.focalLength, 50), aspect);
+      sceneCamera.fov = focalLengthToVerticalFov(num(scene.camera.focalLength, FALLBACK_FOCAL_LENGTH_MM), aspect);
       sceneCamera.updateProjectionMatrix();
     }
   }, [containerSize, viewMode, scene]);
@@ -568,7 +568,16 @@ export default function Viewport() {
         </button>
         {viewMode === 'camera' && scene && (
           <span className="rounded bg-zinc-800/90 px-2 py-1 text-[11px] text-zinc-400 ring-1 ring-zinc-700">
-            {num(scene.camera.focalLength, 50)}mm · {scene.camera.aspectRatio}
+            {/* A flagged lens must not read as a decided one — this badge is what a
+                director glances at while framing. Show the sentinel and the fallback
+                actually being rendered, rather than the fallback alone. */}
+            {scene.camera.focalLength === '[?]' ? (
+              <span className="text-amber-400">[?] ({FALLBACK_FOCAL_LENGTH_MM}mm)</span>
+            ) : (
+              `${scene.camera.focalLength}mm`
+            )}
+            {' · '}
+            {scene.camera.aspectRatio}
           </span>
         )}
       </div>
