@@ -718,7 +718,7 @@ remembered to run them.
   *is* the lint gate — verify `CI=true npm run build` locally before pushing, since a plain
   local `npm run build` will not reproduce it.
 
-## Parser picks a focus subject (2026-08-07): prompt change UNVERIFIED against a live model
+## Parser picks a focus subject (2026-08-07): DONE, confirmed by live parse
 
 - Context: with `focusSubjectId` now aiming the shot camera, three of the six saved scenes
   had it as `null` — the parser only set it "if focus is explicit," so an ordinary prompt
@@ -744,13 +744,16 @@ remembered to run them.
 
 ### Rules worth remembering
 
-- **A parser *prompt* change cannot be verified by this repo's tests.** The suite mocks
-  `global.fetch`, so it exercises post-processing and never the model. The guard above is
-  covered; the instruction that the model should pick a subject is not, and cannot be
-  without a live parse. There is no `.env` and no `ANTHROPIC_API_KEY` in the container, so
-  no live parse was possible here. **Run one before believing the prompt half of this
-  works** — and remember the backend must be restarted first, since it is a plain node
-  process (PRD §10 / the parser note at the top of this file).
-- The two halves fail differently and that is the point: if the model ignores the new rule,
-  scenes come back with `focusSubjectId: null` exactly as before — a silent no-op, not an
-  error. Check a fresh parse of a prompt with characters and no explicit focus language.
+- **Live-parse evidence (owner-run, 2026-08-07):** a fresh parse of a prompt with characters
+  and no explicit focus language returned `camera.focusSubjectId: "char_01"` rather than
+  `null`. That is the prompt half working — the model now nominates a subject unprompted.
+  One parse is evidence, not proof: the model chooses, so treat a future `null` on a
+  character-bearing scene as a prompt-adherence question, not a code regression.
+- **A parser *prompt* change cannot be verified by this repo's tests**, which is why the
+  above had to be run by hand. The suite mocks `global.fetch`, so it exercises
+  post-processing and never the model — the dangling-id guard is covered by tests, the
+  instruction to nominate a subject never can be. Any future parser-prompt work needs the
+  same treatment: restart the backend (plain node, no watcher) and parse something real.
+- The two halves fail differently, and that is why they were verified separately: if the
+  model ignores a prompt rule, scenes come back exactly as before — a silent no-op, not an
+  error. Nothing in CI would have caught it.
