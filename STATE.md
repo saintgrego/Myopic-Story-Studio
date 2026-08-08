@@ -717,3 +717,43 @@ remembered to run them.
   build` treat ESLint warnings as errors. There is no separate lint script, so the build step
   *is* the lint gate — verify `CI=true npm run build` locally before pushing, since a plain
   local `npm run build` will not reproduce it.
+
+## Parser picks a focus subject (2026-08-07): DONE, confirmed by live parse
+
+- Context: with `focusSubjectId` now aiming the shot camera, three of the six saved scenes
+  had it as `null` — the parser only set it "if focus is explicit," so an ordinary prompt
+  that never says "focus on her" left the camera pointed at centre stage regardless of where
+  the subject stood.
+- **The saved scenes were deliberately NOT re-parsed.** Re-parsing would not have helped:
+  `focusSubjectId` and `depthOfField` were already in the parser's output schema when those
+  scenes were made, so the same parser on the same prompts returns the same thing minus any
+  hand-tuning. Nothing about the v1.3 work needs a re-parse — the camera aiming and the
+  focus readout are renderer/panel changes that existing scenes get for free.
+- Prompt change: a new rule requires `focusSubjectId` whenever the scene has any characters
+  (the character named first, or the one the action centres on), restricts it to an id
+  actually emitted, reserves `null` for character-less scenes, and forbids `"[?]"` — the
+  field is `string | null` in the type model, not `Flagged<T>`, so a sentinel there would be
+  a type lie.
+- **Server-side guard added, and it is the part that is actually tested.** A model can name
+  an id it never emitted; that dangling reference would fall back to centre stage in the
+  viewport (so it "works") while storing a value the panel's dropdown cannot offer. The
+  parser now nulls any `focusSubjectId` that matches no emitted character. Tests 61 → 65.
+- **Mutation-checked rather than assumed:** disabling the guard fails exactly the two new
+  tests and nothing else; restoring it returns 65/65. Worth doing — a test that passes
+  whether or not the code works is worse than no test.
+
+### Rules worth remembering
+
+- **Live-parse evidence (owner-run, 2026-08-07):** a fresh parse of a prompt with characters
+  and no explicit focus language returned `camera.focusSubjectId: "char_01"` rather than
+  `null`. That is the prompt half working — the model now nominates a subject unprompted.
+  One parse is evidence, not proof: the model chooses, so treat a future `null` on a
+  character-bearing scene as a prompt-adherence question, not a code regression.
+- **A parser *prompt* change cannot be verified by this repo's tests**, which is why the
+  above had to be run by hand. The suite mocks `global.fetch`, so it exercises
+  post-processing and never the model — the dangling-id guard is covered by tests, the
+  instruction to nominate a subject never can be. Any future parser-prompt work needs the
+  same treatment: restart the backend (plain node, no watcher) and parse something real.
+- The two halves fail differently, and that is why they were verified separately: if the
+  model ignores a prompt rule, scenes come back exactly as before — a silent no-op, not an
+  error. Nothing in CI would have caught it.
