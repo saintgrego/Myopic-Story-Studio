@@ -802,3 +802,65 @@ folder), but it does need a licensed base mesh, a rig and a DCC tool to pose it,
 owner decision that PRD §9 item 1 explicitly reserves. Written up, with a ready-to-adopt
 §11 amendment draft, in **`docs/proposal-realistic-figure-assets.md`**. `PRD.md` was left
 untouched on purpose. Owner's call: **log it, don't build yet.**
+
+## Pose mannequin — body build (2026-08-07): DONE
+
+Owner asked for more realism than the facial landmarks gave, with a reference render of a
+sculpted anatomical base mesh, then chose to push the *procedural* mannequin as far as
+primitives go rather than adopt a real figure asset (that proposal stays parked in
+`docs/proposal-realistic-figure-assets.md`). This is that pass: still content only —
+generator plus the three `.glb` outputs, no schema, viewport or parser change.
+
+**What the figure gained**
+
+- **Tapered limbs.** New `roundedCone()` lathes a capsule with two different end radii, and
+  `limb()` now takes `(rProximal, rDistal, length)`. Uniform capsules were the single
+  biggest thing making the old figure read as plumbing — same silhouette at the shoulder and
+  the wrist. **Segment totals were held identical to the capsule formula** (`length + rProx
+  + rDist`, arms 0.28/0.25, legs 0.38/0.34), which is why the POSES table's `hipY` values
+  still ground the feet without re-eyeballing them. Change a radius, change the length to
+  match, or the figure floats.
+- **Torso as a lathe profile** (`TORSO_PROFILE`): pelvis, pinched waist, broadened chest,
+  shoulder shelf, spanning the same y 0 → 0.65 the capsule did, `scale.z = 0.78` so the
+  section is elliptical rather than round.
+- **Shoulders**: deltoid caps and clavicle bars, parented to the **torso, not the arm
+  group** — they stay put when the arm swings, which is what makes a shoulder read as a
+  shoulder instead of a ball joint.
+- **Neck column**, and the neck joint **raised 0.72 → 0.79** (see below).
+- **Hands** (palm block + thumb nub, no fingers) and **feet** (heel block + tapered toe,
+  both soles flush at the old sole height).
+- **Head**: cranium is now a lathe profile (`SKULL_PROFILE`) with jawline slabs and a chin.
+
+**Two things worth knowing before touching this again**
+
+1. **A sphere cannot have a jawline.** First attempt hung a tapered box under the sphere
+   head; it vanished. Any jaw box narrow enough to *look* like a jaw is entirely inside a
+   head-sized ball — at y=-0.07 the sphere's radius is still 8.6cm and the jaw's half-width
+   is 6.4cm. The taper has to be in the head's own silhouette, hence the lathe. Same lesson
+   as the brow: judge by render, and the silhouette column is what exposes it.
+2. **Raising the neck joint to 0.79 fixed a defect that predated all of this.** The head has
+   always sat 4cm inside the torso capsule; a ball had no chin so nobody noticed. Once the
+   head had a chin, the chin and jaw were buried in the upper chest — the clearance check
+   showed skull/jaw/chin all intersecting `torso`. At 0.79 the chin clears the collar, the
+   neck column fills the gap, and the standing figure is ~1.68m rather than ~1.61m — closer
+   to `framing.ts`'s `NOMINAL_FIGURE_MID_HEIGHT = 0.9` assumption, not further from it.
+
+**Evidence**
+
+- Valid glTF v2 via `file`: standing 155,900 B, sitting 156,344 B, crouching 156,620 B
+  (up from ~94 KB — the lathes cost geometry; still trivially small).
+- **Clearance check: zero intersections in any pose**, head parts against every other mesh.
+  That is *better* than before this pass, which had skull∩torso (63 vertices), jawL/R∩torso
+  and chin∩torso. Crouching remains the tightest and clears comfortably: skull→shoulder
+  18.3cm, jaw→shoulder 18.1cm, chin→deltoid 14.2cm.
+- Contact sheet (¾ figure / ¾ head / front head / silhouette × three poses): the head reads
+  as a tapered skull with brow, nose, cheekbones, jaw corners and chin; the body reads with
+  a waist, chest, shoulders and a neck.
+- **In the viewport**, scratch scene with all three poses (deleted afterwards), key azimuth
+  swept 330° → 60° via the Lighting panel: the tapered forms carry a shading gradient the
+  uniform capsules never did — deltoid highlights swap sides, the chest and waist invert,
+  and the facial planes flip with them.
+- Gates green: `npx tsc --noEmit`, `npm run test:ci` (61), `CI=true npm run build`.
+
+**What this is not.** It is a wooden artist's mannequin, and it is nowhere near the owner's
+reference render. That gap is an asset-class gap, not a tuning gap — see the proposal doc.
