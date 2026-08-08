@@ -4,7 +4,14 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { useSceneStore } from '../store/sceneStore';
-import type { Environment, MeshRef } from '../types/scene';
+import {
+  cameraAimPoint,
+  cameraPosition,
+  num,
+  verticalHalfExtent,
+} from '../lib/framing';
+import { FALLBACK_F_STOP, FALLBACK_FOCAL_LENGTH_MM, focusRange } from '../lib/dof';
+import type { Environment, MeshRef, SceneFile, Vec3 } from '../types/scene';
 import { characterColor, propColor } from '../palette';
 import POSES from '../poses.json';
 import PROPS from '../props.json';
@@ -18,10 +25,6 @@ const SENSOR_WIDTH_MM = 36;
 // materials untouched — same principle as the panel's replace-custom-mesh
 // confirm (PRD §11 v1.4).
 const LIBRARY_PATHS = new Set<string>([...POSES, ...PROPS].map((entry) => entry.path));
-
-function num(v: number | '[?]', fallback: number): number {
-  return v === '[?]' ? fallback : v;
-}
 
 function aspectRatioToNumber(ar: string): number {
   switch (ar) {
@@ -125,25 +128,6 @@ function sphericalDirection(azimuthDeg: number, elevationDeg: number): THREE.Vec
   );
 }
 
-// Position is base-anchored (object's floor contact point), matching how a director thinks
-// about blocking — "stand here" means feet-at-XYZ, not geometric-center-at-XYZ. This offset
-// lifts each primitive so its bottom sits at the group's local origin.
-function verticalHalfExtent(shape: string, dims: number[]): number {
-  switch (shape) {
-    case 'sphere':
-      return dims[0] ?? 0.5;
-    case 'box':
-      return (dims[1] ?? 1) / 2;
-    case 'cylinder':
-      return (dims[2] ?? 1) / 2;
-    case 'cone':
-      return (dims[1] ?? 1) / 2;
-    case 'capsule':
-    default:
-      return (dims[1] ?? 1.8) / 2;
-  }
-}
-
 function buildPrimitiveGeometry(shape: string, dims: number[]): THREE.BufferGeometry {
   switch (shape) {
     case 'box':
@@ -165,7 +149,8 @@ function buildPrimitiveGeometry(shape: string, dims: number[]): THREE.BufferGeom
 
 function disposeObject3D(obj: THREE.Object3D) {
   obj.traverse((child) => {
-    if (child instanceof THREE.Mesh) {
+    // Lines (the focus-plane markers) hold geometry/material too, not just meshes.
+    if (child instanceof THREE.Mesh || child instanceof THREE.Line) {
       child.geometry.dispose();
       if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
       else child.material.dispose();
@@ -225,6 +210,65 @@ function buildObject(mesh: MeshRef, color: number, onGltfError: (path: string) =
   const group = new THREE.Group();
   group.add(meshObj);
   return group;
+}
+
+// PRD §11 v1.3: unfilled indicators only — these are lines on the ground showing where
+// the near and far limits of focus cross the shot. Nothing here changes how a pixel is
+// shaded; rendered blur stays out of scope.
+const FOCUS_MARKER_COLOR = 0x5fd3b0;
+// The ground plane is 120x120, so past its half-width there is nothing to draw on and a
+// far limit that distant reads as "effectively infinity" anyway.
+const FOCUS_MARKER_MAX_DISTANCE = 60;
+
+function buildFocusPlaneMarkers(scene: SceneFile, camPos: Vec3, aim: Vec3): THREE.Line[] {
+  const focal = num(scene.camera.focalLength, FALLBACK_FOCAL_LENGTH_MM);
+  const range = focusRange(
+    focal,
+    num(scene.camera.depthOfField, FALLBACK_F_STOP),
+    Math.hypot(aim.x - camPos.x, aim.y - camPos.y, aim.z - camPos.z),
+  );
+  if (!range) return [];
+
+  const origin = new THREE.Vector3(camPos.x, camPos.y, camPos.z);
+  const dir = new THREE.Vector3(aim.x, aim.y, aim.z).sub(origin);
+  if (dir.lengthSq() === 0) return [];
+  dir.normalize();
+
+  // The focus plane is perpendicular to the view axis; its intersection with the ground
+  // is the line we draw. `right` runs along that intersection, and `inPlaneUp` is the
+  // steepest direction within the plane — used to walk from the plane's centre to y = 0.
+  const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0));
+  if (right.lengthSq() < 1e-8) return []; // camera straight down: no useful ground line
+  right.normalize();
+  const inPlaneUp = new THREE.Vector3().crossVectors(right, dir).normalize();
+  if (Math.abs(inPlaneUp.y) < 1e-6) return [];
+
+  const lines: THREE.Line[] = [];
+  for (const [distance, opacity] of [
+    [range.near, 0.9],
+    [range.far, 0.45],
+  ] as const) {
+    if (!Number.isFinite(distance) || distance <= 0 || distance > FOCUS_MARKER_MAX_DISTANCE) {
+      continue;
+    }
+    const centre = origin.clone().addScaledVector(dir, distance);
+    const onGround = centre.clone().addScaledVector(inPlaneUp, -centre.y / inPlaneUp.y);
+    onGround.y = 0.02; // above the ground plane and grid so it doesn't z-fight
+    // Span roughly the frame's width at this distance, so the marker shows where the
+    // focus band crosses the shot instead of being an arbitrary length.
+    const halfWidth = THREE.MathUtils.clamp((distance * SENSOR_WIDTH_MM) / focal / 2, 0.75, 30);
+    const geometry = new THREE.BufferGeometry().setFromPoints([
+      onGround.clone().addScaledVector(right, -halfWidth),
+      onGround.clone().addScaledVector(right, halfWidth),
+    ]);
+    lines.push(
+      new THREE.Line(
+        geometry,
+        new THREE.LineBasicMaterial({ color: FOCUS_MARKER_COLOR, transparent: true, opacity }),
+      ),
+    );
+  }
+  return lines;
 }
 
 type ViewMode = 'free' | 'camera';
@@ -441,17 +485,17 @@ export default function Viewport() {
     const aspect = aspectRatioToNumber(scene.camera.aspectRatio === '[?]' ? '16:9' : scene.camera.aspectRatio);
     sceneCamera.fov = focalLengthToVerticalFov(num(scene.camera.focalLength, 50), aspect);
     sceneCamera.aspect = aspect;
-    sceneCamera.position.set(
-      num(scene.camera.position.x, 0),
-      num(scene.camera.position.y, 1.6),
-      num(scene.camera.position.z, 4),
-    );
-    sceneCamera.lookAt(0, 1, 0);
+    const camPos = cameraPosition(scene);
+    sceneCamera.position.set(camPos.x, camPos.y, camPos.z);
+    const aim = cameraAimPoint(scene);
+    sceneCamera.lookAt(aim.x, aim.y, aim.z);
     sceneCamera.updateProjectionMatrix();
 
     const helper = new THREE.CameraHelper(sceneCamera);
     cameraHelperRef.current = helper;
     sceneRef.current.add(helper);
+
+    for (const line of buildFocusPlaneMarkers(scene, camPos, aim)) contentGroup.add(line);
   }, [scene]);
 
   // Resize renderer to fill the container in free view, or letterbox to the shot's

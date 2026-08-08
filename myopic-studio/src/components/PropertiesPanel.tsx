@@ -1,7 +1,16 @@
 import React from 'react';
 import { characterIndex, PathSegment, propIndex, useSceneStore } from '../store/sceneStore';
+import {
+  FALLBACK_F_STOP,
+  FALLBACK_FOCAL_LENGTH_MM,
+  focusRange,
+  formatDistance,
+  resolveFocusInputs,
+} from '../lib/dof';
+import { hasResolvedFocusSubject, subjectDistance } from '../lib/framing';
 import type {
   AspectRatio,
+  SceneFile,
   CameraAngle,
   CameraMovement,
   LightingScheme,
@@ -147,6 +156,72 @@ function MeshEditor({ path, mesh }: { path: PathSegment[]; mesh: MeshRef }) {
         />
       ))}
     </>
+  );
+}
+
+/**
+ * PRD §11 v1.3: depth of field as information, never as blur. Numbers only — nothing
+ * here changes what the renderer draws, beyond the ground-plane markers Viewport adds
+ * at these same two distances.
+ *
+ * A flagged ('[?]') lens or stop still computes, from the viewport's own fallbacks, and
+ * says so — an empty readout would hide the shape of the answer while the director is
+ * still deciding what the value should be.
+ */
+function FocusReadout({ scene }: { scene: SceneFile }) {
+  const { focalLengthMm, fStop, provisional } = resolveFocusInputs(
+    scene.camera.focalLength,
+    scene.camera.depthOfField,
+  );
+  const distance = subjectDistance(scene);
+  const range = focusRange(focalLengthMm, fStop, distance);
+
+  const measuredTo = hasResolvedFocusSubject(scene)
+    ? scene.camera.focusSubjectId
+    : 'centre stage';
+
+  return (
+    <div className="mt-3 border-t border-zinc-700 pt-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+          Depth of Field
+        </span>
+        {provisional && (
+          <span className="rounded bg-amber-950 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-400 ring-1 ring-amber-700">
+            Provisional
+          </span>
+        )}
+      </div>
+
+      {range === null ? (
+        <p className="mt-2 text-xs text-zinc-500">
+          Not computable from the current lens, stop, and distance.
+        </p>
+      ) : (
+        <dl className="mt-2 grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-xs tabular-nums">
+          <dt className="text-zinc-500">Focus at</dt>
+          <dd className="text-zinc-200">
+            {formatDistance(distance)}{' '}
+            <span className="text-zinc-500">to {measuredTo}</span>
+          </dd>
+          <dt className="text-zinc-500">In focus</dt>
+          <dd className="text-zinc-200">
+            {formatDistance(range.near)} – {formatDistance(range.far)}
+          </dd>
+          <dt className="text-zinc-500">Depth</dt>
+          <dd className="text-zinc-200">{formatDistance(range.total)}</dd>
+          <dt className="text-zinc-500">Hyperfocal</dt>
+          <dd className="text-zinc-400">{formatDistance(range.hyperfocal)}</dd>
+        </dl>
+      )}
+
+      {provisional && (
+        <p className="mt-2 text-[11px] leading-snug text-amber-500/80">
+          Computed from defaults ({FALLBACK_FOCAL_LENGTH_MM}mm, f/{FALLBACK_F_STOP}) for the
+          flagged values above.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -351,6 +426,7 @@ export default function PropertiesPanel() {
           options={ASPECT_RATIO}
           onChange={(v) => setField(['camera', 'aspectRatio'], v)}
         />
+        <FocusReadout scene={scene} />
       </PanelSection>
     );
   }

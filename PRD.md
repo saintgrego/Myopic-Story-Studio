@@ -80,9 +80,9 @@ Carry the parameter definitions forward from `myopic-3d-studio.md` sections 3.1�
 
 - **Environment:** location name, **setting (`Interior` | `Exterior`, added 31 July 2026)**, time of day, weather/atmosphere. No background asset field (nothing to point it at). `setting` exists because interior/exterior was only ever free text inside the location name, and the renderer has to know it as a fact — a sky must not appear indoors. The parser extracts it from INT./EXT. slugline framing. `.myo` files written before it existed stay loadable: the viewport falls back to sniffing the location name, so no migration is required. `weather` now also drives fog density, not just sky turbidity, so it is worth phrasing precisely ("light mist" and "thick fog" render differently).
 - **Lighting:** scheme, key direction (azimuth/elevation), key colour, fill ratio, rim toggle, shadow softness, mood preset. These map to real Three.js lights.
-- **Camera:** shot type, angle, focal length (mm), depth of field, focus subject, XYZ position, movement (metadata only), aspect ratio. **The focal length must genuinely drive the Three.js camera FOV.** A 35mm and an 85mm must look different.
+- **Camera:** shot type, angle, focal length (mm), depth of field, focus subject, XYZ position, movement (metadata only), aspect ratio. **The focal length must genuinely drive the Three.js camera FOV.** A 35mm and an 85mm must look different. **Focus subject (v1.2 track) aims the shot camera**, and **depth of field is read by the viewport as of v1.3** — as a computed near/far focus readout and ground-plane markers, never as rendered blur. See section 11.
 - **Characters:** figure ID, position XYZ, rotation, scale, visibility, `mesh` reference. Drop expression and costume — nothing to attach them to. **Posture (v1.2) is not a new field:** a pose is expressed entirely through the existing `mesh` reference — `/assets/poses/sitting.glb` *is* the sitting pose. See section 11 for why.
-- **Props:** prop ID, position, rotation, scale, visibility, `mesh` reference. **The mesh may be a library proxy (v1.3):** `/assets/props/sofa.glb` *is* the sofa, on the same "the mesh is the object type" reasoning as poses. See section 11.
+- **Props:** prop ID, position, rotation, scale, visibility, `mesh` reference. **The mesh may be a library proxy (v1.4):** `/assets/props/sofa.glb` *is* the sofa, on the same "the mesh is the object type" reasoning as poses. See section 11.
 
 ### Scene file (`.myo`)
 
@@ -195,7 +195,7 @@ This replaces the removed non-goal. It is the whole of the standing policy on ho
 
 **In, and built:** cast shadows, ground plane, sky dome and horizon, filmic tone mapping, distance fog.
 
-**Out, and not to be built without another amendment logged here:** ray tracing, authored PBR materials, texture maps, reflections, bloom, ambient occlusion, and depth-of-field as a rendered effect (the f-stop stays what it is today — stored metadata). Flat/basic materials remain correct, and every object remains proxy geometry.
+**Out, and not to be built without another amendment logged here:** ray tracing, authored PBR materials, texture maps, reflections, bloom, ambient occlusion, and depth-of-field as a rendered effect (the f-stop drives the focus readout added in v1.3; it must not drive shading). Flat/basic materials remain correct, and every object remains proxy geometry.
 
 **The standing risk this rule exists to manage:** each of these individually looks like a small step from what already ships, and "it would help the director see it" can be argued for any of them. That argument is not sufficient — apply the test, and if it passes, amend this section before building.
 
@@ -227,7 +227,46 @@ This replaces the removed non-goal. It is the whole of the standing policy on ho
 
 **Deliberately not decided here:** section 9's asset-pipeline question stays open. The generated proxy mannequins are the pose library's *current* content, not a commitment — a Mixamo or MakeHuman figure exported per-pose to `.glb` drops into the same folder under the same contract. Choosing that source remains the owner's call.
 
-### v1.3 — 5 August 2026: prop proxy library
+### v1.3 — 5 August 2026: depth of field as a readout, not as blur
+
+**Requested by the owner on 5 August 2026**, arising from a question about how to set specific camera distances and lenses. The lens is a real field and distance is real (implicit in `camera.position`), but `camera.depthOfField` was stored and inert — the one camera control that did nothing. The question behind the question was not "make it look shot," it was "if I stop down to f/8, can I put the second detective at the window and still have them sharp?"
+
+**The distinction this amendment turns on.** The governing rule's out-list bars depth of field *as a rendered effect* — blur, bokeh, a soft background. That stays out, and this amendment does not touch it. What it permits is depth of field *as computed information*: the near and far limits of acceptable focus, stated as numbers and marked on the ground.
+
+**Why it passes the test.** Section 11's test asks whether a feature answers a blocking question or a finishing question. "How much of my staging holds focus" is a blocking question of the same kind as "where does the shadow fall" — it constrains where a director can put people. At 85mm and f/2 with the subject at 3m the sharp zone is 15cm deep: an actor who leans back is soft, and the blocking has to account for it. At f/8 on a 35mm it is 5.3m and effectively nothing is constrained. That difference changes where people stand. Rendering the blur would answer "does this look shot" — a finishing question — and remains out.
+
+**The counter-argument, recorded.** Section 11 warns that "it would help the director see it" can be argued for any of the out-list items, and that the argument is not sufficient. The honest risk here is that a focus readout is one step from focus-plane markers, which is one step from a blur preview. The boundary is therefore explicit: **numbers and unfilled line indicators are in; any change to how a pixel is shaded is out.** A future request for blurring needs its own amendment, and this one must not be cited as precedent for it.
+
+**What changed in this document**
+
+- **The out-list line is narrowed, not removed.** Its parenthetical now reads *(the f-stop drives the focus readout added in v1.3; it must not drive shading)*. Ray tracing, PBR, texture maps, reflections, bloom, and AO are untouched.
+- **Section 5 Camera** notes that `depthOfField` is read by the viewport as of v1.3.
+- **No schema change.** `focalLength` and `depthOfField` already existed; subject distance is derivable because `focusSubjectId` now aims the camera. Nothing new is stored, and the `.myo` envelope and parser output contract are untouched by construction.
+
+**Authorized to build under this amendment**
+
+1. **A focus readout in the Camera properties panel.** Near limit, far limit, total depth, and hyperfocal distance, computed from `focalLength`, `depthOfField`, and the distance from `camera.position` to the focus subject's aim point. Circle of confusion fixed at 0.03mm — the full-frame convention matching the existing `SENSOR_WIDTH_MM = 36` assumption. Stated as a constant with that reasoning, not exposed as a tunable: a "sharpness" slider is a finishing control.
+2. **A hyperfocal indication.** At or past hyperfocal the far limit reads infinity rather than a large number, because that is the fact the director needs.
+3. **Near/far focus-plane markers in the viewport.** Thin unfilled lines where the two limits cross the ground, in the same family as the existing `CameraHelper`. Spanning roughly the frame's width at their distance, so they show where the focus band crosses the shot. No shading change and no blur.
+
+**Behaviour at the edges**
+
+- `depthOfField` or `focalLength` is `[?]` → **the readout still computes, from the viewport's own fallbacks, and is labelled provisional.** An empty readout would hide the shape of the answer while the director is still deciding what the value should be. The focal-length fallback (50mm) is the one the viewport already renders a flagged lens at; the f-stop fallback (f/2.8) is introduced here, because the viewport never read that field before and so had no existing default to inherit.
+- No focus subject → measure to `DEFAULT_AIM` `(0,1,0)`, the same point the camera aims at, and label the readout so it is clear what was measured to.
+- Inputs with no physical meaning (non-positive or non-finite lens, stop, or distance) → no readout at all, rather than a plausible-looking number.
+
+**Acceptance (owner-verifiable, per section 8's convention)**
+
+- [ ] 85mm / f/2 / subject at 3m reads roughly 2.93–3.07m, ~15cm total.
+- [ ] Changing only the stop to f/8 widens it to roughly 2.74–3.32m, ~59cm.
+- [ ] 35mm / f/8 / subject at 3m reads roughly 1.90–7.16m, ~5.3m deep.
+- [ ] A subject past hyperfocal reads a far limit of infinity, and only the near marker draws.
+- [ ] A flagged f-stop still shows numbers, marked provisional.
+- [ ] The rendered image is otherwise unchanged — nothing here alters shading.
+
+**Still out, and unaffected by this amendment:** rendered depth-of-field blur of any kind, bokeh shape, focus falloff, lens breathing, and animated focus pulls (non-goal #6 on animation stands). If a feature changes how a pixel is shaded, it does not belong under this amendment.
+
+### v1.4 — 5 August 2026: prop proxy library
 
 **Requested by the owner on 5 August 2026, from use:** "the basic shapes we're using as symbolic stand-ins aren't reading for me at all."
 
@@ -257,11 +296,11 @@ This replaces the removed non-goal. It is the whole of the standing policy on ho
 
 **Still out, and unaffected:** everything in the "Rendering scope" out-list. Also explicitly *not* authorized here: importing arbitrary user-downloaded `.glb` assets, an asset browser (non-goal #2 stands), and any set/room-level mesh — `Environment` still has no mesh field. Those were discussed alongside this change and deliberately not taken; see section 9, which stays open.
 
-### v1.4 — 5 August 2026: the warm/cool proxy palette
+### v1.5 — 5 August 2026: the warm/cool proxy palette
 
-**Requested by the owner on 5 August 2026**, immediately after v1.3 shipped: cool greys and warm greys, five values each, warm assigned to people and cool to everything else. This supersedes v1.3's single-value-per-class colour decision.
+**Requested by the owner on 5 August 2026**, immediately after v1.4 shipped: cool greys and warm greys, five values each, warm assigned to people and cool to everything else. This supersedes v1.4's single-value-per-class colour decision.
 
-**Applying the section 11 test.** Telling a figure from a piece of furniture, and telling two figures apart, are *blocking* questions — they are the "where is everyone standing" question at the level of "which one is that." v1.3 already conceded the principle by using value to separate figures from set dressing; this makes that separation carry hue as well, and gives each class five steps so neighbouring objects don't merge. **In scope.** These remain greys — 10–13% saturation, which is below the threshold where anyone would read them as a colour choice. Nothing here makes the picture look shot, real, or good, and the out-list is untouched.
+**Applying the section 11 test.** Telling a figure from a piece of furniture, and telling two figures apart, are *blocking* questions — they are the "where is everyone standing" question at the level of "which one is that." v1.4 already conceded the principle by using value to separate figures from set dressing; this makes that separation carry hue as well, and gives each class five steps so neighbouring objects don't merge. **In scope.** These remain greys — 10–13% saturation, which is below the threshold where anyone would read them as a colour choice. Nothing here makes the picture look shot, real, or good, and the out-list is untouched.
 
 **The core decision — the palette is render-time, not scene state.** `src/palette.ts` holds two five-value ramps; `Viewport.tsx` assigns by the object's index in `scene.characters` / `scene.props`. There is **no colour field on `Character` or `Prop`**, and the `.myo` envelope is untouched. The rejected alternative was a per-object colour field: it would put a presentation choice into the user's saved data, make old `.myo` files inconsistent with new palettes, and hand the parser a decision it has no basis to make.
 

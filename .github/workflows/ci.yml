@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push supersedes the run in flight for the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    name: typecheck / test / build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # The app lives in a subdirectory; the repo root holds PRD.md and STATE.md.
+        working-directory: myopic-studio
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: myopic-studio/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # Not `npx tsc`: with node_modules present npx prefers the local binary, but if
+      # resolution ever misses it fetches a modern TypeScript that fails on this repo's
+      # moduleResolution=node10 — an error that looks like a type error but isn't.
+      # react-scripts@5.0.1's peer range pins TypeScript to 4.9.5; call it directly.
+      - name: Typecheck
+        run: ./node_modules/.bin/tsc --noEmit
+
+      - name: Unit tests
+        run: npm run test:ci
+
+      # CI=true is already set by Actions, which makes react-scripts treat ESLint
+      # warnings as build errors. That is the intended strictness here — this step is
+      # the repo's only lint gate, since there is no separate lint script.
+      - name: Build
+        run: npm run build

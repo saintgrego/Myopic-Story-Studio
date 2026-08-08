@@ -610,10 +610,151 @@ section); the behaviour was verified in the browser by measuring the canvas.
 - This is the first use of `localStorage` in the app. It holds **UI chrome only** — scene and
   storyboard data stay on disk via the backend. Don't let scene state drift into it.
 
+## focusSubjectId aims the shot camera (2026-08-05): DONE, verified in-browser
+
+- Gap found while answering "how do I set specific camera distances and lenses": the shot
+  camera was hardcoded to `lookAt(0, 1, 0)`, so `camera.focusSubjectId` was inert — the
+  dropdown in the Camera panel wrote a value that nothing read. A character placed away
+  from the origin drifted off-centre (or out of frame on a long lens) with no way to aim at
+  them except hand-solving `camera.position`.
+- Fix in `Viewport.tsx`: `cameraAimPoint(scene)` resolves `focusSubjectId` against
+  `scene.characters` and returns the subject's aim point; `sceneCamera.lookAt()` takes that
+  instead of the literal. Unset, unknown, or hidden subject falls back to `DEFAULT_AIM`
+  `(0,1,0)` — the exact old value, so every pre-existing scene frames identically.
+- Aim height respects the base-anchored convention: `position.y + midHeight * scale`, where
+  `midHeight` is `verticalHalfExtent()` for a primitive (0.9 for the standard 1.8m capsule,
+  which is why the old hardcoded 1.0 looked roughly right) and a nominal 0.9 for a `gltf`
+  mesh. **The nominal is not laziness** — `GLTFLoader` is still in flight when the camera is
+  positioned in the same effect, so a posed figure's real bounds aren't knowable
+  synchronously. Measuring them would mean re-aiming on load callback; not worth it while
+  every pose in the library is a roughly human-height mannequin.
+- Only the shot camera changed. The key/rim lights still `lookAt(0, 1, 0)` deliberately —
+  they're direction-only, and re-aiming them at the subject would move every shadow in the
+  scene as a side effect of a camera setting.
+- Evidence (scene `d330bdf7` "Distant Figure at Sunset": subject at x=2 z=-10, camera at
+  z=5, 35mm, 2.39:1): before, the figure sat high and right of frame; after, dead centre.
+  Numerically the subject's NDC goes (0.260, 0.339) → (0.000, 0.000). Regression-checked
+  `62a26f9c` (null focus — unchanged, both detectives framed as before) and `4f4fefce`
+  (focus on a `sitting.glb` — exercises the gltf nominal, renders centred).
+- Gates: `tsc --noEmit` clean, `test:ci` 28/28, `npm run build` compiled. No new tests —
+  the logic lives in `Viewport.tsx`, which stays deliberately untested (WebGL under jsdom).
+- Not touched, and deliberately: `camera.depthOfField` stays stored metadata. PRD §11's
+  out-list names depth of field as a rendered effect explicitly ("the f-stop stays what it
+  is today"), so wiring it to anything needs an amendment logged first.
+
+### Rules worth remembering
+
+- **CRA dev server won't start in this container without `DANGEROUSLY_DISABLE_HOST_CHECK=true`.**
+  It dies with `options.allowedHosts[0] should be a non-empty string`. Cause: `package.json`
+  has a `proxy` field, so CRA enables the host check and passes `urls.lanUrlForConfig` as the
+  sole allowed host — and that resolves to `undefined` on a box with no LAN address. Setting
+  `HOST` alone does not fix it. Environment quirk, not a repo bug; don't "fix" it in config.
+- `npx tsc` fetches a *modern* TypeScript when `node_modules` is absent and then fails on
+  `moduleResolution=node10` deprecation — which looks like a real typecheck error but isn't.
+  Run `npm install` first and use `./node_modules/.bin/tsc` to get the pinned 4.9.5.
+
+## Depth-of-field focus readout (2026-08-05): DONE, PRD §11 amended to v1.3 first
+
+- **Amendment before code, per §11.** `depthOfField` was the last inert camera field. The
+  owner approved v1.3 — depth of field as *computed information* (numbers + ground markers),
+  with rendered blur still barred. The out-list line was narrowed, not deleted: its
+  parenthetical now scopes the prohibition to shading. Two owner decisions differed from the
+  first draft and the amendment was rewritten before being applied: **plane markers are in**
+  (drafted as optional), and **flagged inputs still compute** from fallbacks, labelled
+  provisional (drafted as showing "—").
+- **New: `src/lib/framing.ts` and `src/lib/dof.ts`.** The aim-point maths moved out of
+  `Viewport.tsx` — the panel needs the same subject distance the camera uses, and anything
+  left inside Viewport is untestable by construction (no WebGL under jsdom). `framing.ts`
+  holds `num`, `verticalHalfExtent`, `cameraAimPoint`, `cameraPosition`, `subjectDistance`,
+  `hasResolvedFocusSubject`; Viewport imports them and wraps in `THREE.Vector3`.
+- **Test count 28 → 61.** Extracting the maths is what made it testable: `dof.test.ts` covers
+  the range arithmetic, the hyperfocal → infinity transition, the null-for-impossible-inputs
+  contract, and formatting; `framing.test.ts` covers the aim point (primitive vs gltf, scale,
+  raised base, all three fallback paths, flagged components) — logic that shipped untested in
+  the previous milestone because it lived in Viewport.
+- **`resolveFocusInputs()` exists for testability, not tidiness.** The provisional decision
+  was originally inline in the panel, which can't be tested (no React Testing Library in this
+  repo — CRA's template deps were never added). Pulling it into `dof.ts` is what let the
+  flagged-input behaviour be covered at all.
+- **Circle of confusion is fixed at 0.03mm**, the full-frame convention matching the existing
+  `SENSOR_WIDTH_MM = 36`. Deliberately not a tunable — a "sharpness" slider is a finishing
+  control and §11 bars those.
+- **`FALLBACK_F_STOP = 2.8` is new state, unlike the 50mm lens fallback.** The viewport
+  already had a focal-length default because it renders FOV; it never read `depthOfField`, so
+  there was nothing to inherit. Recorded in the amendment rather than buried in the constant.
+- **`disposeObject3D` now disposes `THREE.Line` as well as `THREE.Mesh`.** The markers are
+  Lines, and the old mesh-only check would have leaked geometry and material on every scene
+  rebuild. Easy to miss: the leak is silent.
+- Evidence (in-browser, both cases screenshotted):
+  - `62a26f9c` "Two Detectives", 35mm f/2.8, no focus subject → measured 4.04m to centre
+    stage, in focus 3.17–5.58m, depth 2.41m, hyperfocal 14.62m; both ground markers draw.
+  - `d330bdf7` "Distant Figure at Sunset", 35mm f/8, focus `char_01` at 15.15m — past the
+    5.14m hyperfocal → reads `3.82 m – ∞`, depth `∞`, and **only the near marker draws**.
+- Gates: `tsc --noEmit` clean, `test:ci` 61/61, `npm run build` compiled.
+
+### Rules worth remembering
+
+- **The provisional readout state has no in-app repro.** No fixture scene carries a flagged
+  lens or stop, and manufacturing one means either a live parse (needs `ANTHROPIC_API_KEY`)
+  or hand-editing a `.myo` — which is the user's data. It is covered by unit test, not by
+  screenshot. Same will be true of any future flagged-value UI: check whether a fixture can
+  even reach the state before promising visual evidence.
+- **Marker geometry is a plane-ground intersection, not a point.** The focus plane is
+  perpendicular to the *view axis*, so on a tilted camera its ground line is offset from the
+  naive "walk along the floor" position. The code crosses the view direction with world up to
+  get the line direction, then walks the in-plane vertical to `y = 0`. Degenerate when the
+  camera looks straight down — guarded, returns no markers.
+
+## CI on GitHub Actions (2026-08-05): LIVE, main green
+
+The three gates are no longer honour-system. `.github/workflows/ci.yml` runs
+`npm ci` → `tsc --noEmit` → `test:ci` → `build` on every pull request and every push to
+`main`. Before this the repo had **zero** workflows — the gates only ran when someone
+remembered to run them.
+
+**First real results** (all on Node 22, `ubuntu-latest`):
+
+| ref | commit | result |
+| --- | --- | --- |
+| PR #2 (the workflow itself) | `f660119` | green, 58s |
+| PR #1 after base merge | `4dc501b` | green, 60s |
+| PR #3 after base merge | `a7fbb1b` | green, 58s |
+| `main` after all merges | `d4979cb` | green — install 13s, typecheck 3s, tests 2s, build 19s |
+
+`main` is `d4979cb` with all three PRs merged and 61 tests passing under CI.
+
+### Rules worth remembering
+
+- **`npm ci` was broken repo-wide before this** — the lockfile was missing `yaml@2.9.0`, an
+  optional peer of tailwindcss that npm resolves but had never been written back. Any CI
+  anyone added would have died at the install step, before a single gate ran. Fixed in the
+  same PR as the workflow. The drift had been noticed *earlier the same session and dismissed
+  as incidental noise*; it wasn't. Treat an unexplained `package-lock.json` diff as a
+  question, not as churn — `npm ci` is the check that settles it (`npm install` papers over
+  it by definition).
+- **`concurrency: cancel-in-progress` means intermediate merge commits can end with no
+  completed run.** Merging #3 forty seconds after #1 cancelled the `main` run for #1's merge
+  commit (`20daf77`, run #5) mid-flight. Not a failure and not a coverage gap here — #3's
+  tree contains #1's changes, so the next run covered both — but on a chain of rapid merges,
+  "cancelled" on an intermediate commit is expected, not alarming.
+- **Squash-merging a PR that another PR is stacked on will wreck the stack.** #2 was squashed
+  safely (nothing branched from it), but #1 was merged with a **merge commit** on purpose:
+  #3's branch contained #1's commits, and squashing would have put differently-SHA'd copies
+  of the same changes on `main`, making #3's diff re-contain #1's work and likely conflict.
+  Preserve commits when something is stacked; squash only leaf PRs.
+- **GitHub only auto-retargets a stacked PR when the base branch is deleted.** After #1
+  merged, #3 still pointed at `claude/push-file-u861cy` — merging it there would have landed
+  the work on a stale branch instead of `main`. The base had to be repointed at `main`
+  explicitly, after which the diff was verified to contain only #3's own eight files.
+- **CI enforces lint, via the build.** Actions sets `CI=true`, which makes `react-scripts
+  build` treat ESLint warnings as errors. There is no separate lint script, so the build step
+  *is* the lint gate — verify `CI=true npm run build` locally before pushing, since a plain
+  local `npm run build` will not reproduce it.
+
 ## Prop proxy library + matte grey palette (2026-08-05): BUILT, GATE NOW CLOSED (see live parse below)
 
 Owner report from use: *"the basic shapes we're using as symbolic stand-ins aren't reading for
-me at all."* Diagnosis and scope reasoning are in **PRD §11 v1.3** — the short version is that
+me at all."* Diagnosis and scope reasoning are in **PRD §11 v1.4** — the short version is that
 v1.2 fixed legibility for characters and left props on the "always a primitive" rule, so a
 domestic interior rendered as a field of identical boxes. **Zero renderer changes**; this is
 the pose pattern applied to props, exactly as PRD §4 promised.
@@ -682,7 +823,7 @@ apply to primitives only.
 
 Owner request straight after the prop library landed: cool greys and warm greys, five values
 each, warm for people and cool for everything else. Reasoning and the rejected alternatives are
-in **PRD §11 v1.4**; this supersedes v1.3's one-grey-per-class decision.
+in **PRD §11 v1.5**; this supersedes v1.4's one-grey-per-class decision.
 
 - **`src/palette.ts`** — `WARM_GREYS` (h≈28°, L 0.60–0.88) and `COOL_GREYS` (h≈214°, L
   0.42–0.74), five each, plus `characterColor(i)` / `propColor(i)` which cycle by index.
@@ -708,7 +849,7 @@ in **PRD §11 v1.4**; this supersedes v1.3's one-grey-per-class decision.
 z-buffered software render of a mock interior (5 props cycling cool, 3 figures cycling warm)
 confirmed figures separate from set dressing at a glance and that no two neighbours merge.
 
-**Still outstanding, unchanged from v1.3:** no live parse has been run from this environment —
+**Still outstanding, unchanged from v1.4:** no live parse has been run from this environment —
 see the sandbox proxy note above.
 
 ### Gotcha worth remembering
@@ -760,3 +901,43 @@ the warm/cool palette (warm figures, cool set dressing).
 - **A furniture-dense parse is slow.** This one took roughly 45 s wall-clock before
   `POST /api/parse` returned 200 (large scene + adaptive thinking sharing the 8192-token
   budget). Nothing is wrong at 20 s — don't go hunting for a hang until well past a minute.
+
+## Parser picks a focus subject (2026-08-07): DONE, confirmed by live parse
+
+- Context: with `focusSubjectId` now aiming the shot camera, three of the six saved scenes
+  had it as `null` — the parser only set it "if focus is explicit," so an ordinary prompt
+  that never says "focus on her" left the camera pointed at centre stage regardless of where
+  the subject stood.
+- **The saved scenes were deliberately NOT re-parsed.** Re-parsing would not have helped:
+  `focusSubjectId` and `depthOfField` were already in the parser's output schema when those
+  scenes were made, so the same parser on the same prompts returns the same thing minus any
+  hand-tuning. Nothing about the v1.3 work needs a re-parse — the camera aiming and the
+  focus readout are renderer/panel changes that existing scenes get for free.
+- Prompt change: a new rule requires `focusSubjectId` whenever the scene has any characters
+  (the character named first, or the one the action centres on), restricts it to an id
+  actually emitted, reserves `null` for character-less scenes, and forbids `"[?]"` — the
+  field is `string | null` in the type model, not `Flagged<T>`, so a sentinel there would be
+  a type lie.
+- **Server-side guard added, and it is the part that is actually tested.** A model can name
+  an id it never emitted; that dangling reference would fall back to centre stage in the
+  viewport (so it "works") while storing a value the panel's dropdown cannot offer. The
+  parser now nulls any `focusSubjectId` that matches no emitted character. Tests 61 → 65.
+- **Mutation-checked rather than assumed:** disabling the guard fails exactly the two new
+  tests and nothing else; restoring it returns 65/65. Worth doing — a test that passes
+  whether or not the code works is worse than no test.
+
+### Rules worth remembering
+
+- **Live-parse evidence (owner-run, 2026-08-07):** a fresh parse of a prompt with characters
+  and no explicit focus language returned `camera.focusSubjectId: "char_01"` rather than
+  `null`. That is the prompt half working — the model now nominates a subject unprompted.
+  One parse is evidence, not proof: the model chooses, so treat a future `null` on a
+  character-bearing scene as a prompt-adherence question, not a code regression.
+- **A parser *prompt* change cannot be verified by this repo's tests**, which is why the
+  above had to be run by hand. The suite mocks `global.fetch`, so it exercises
+  post-processing and never the model — the dangling-id guard is covered by tests, the
+  instruction to nominate a subject never can be. Any future parser-prompt work needs the
+  same treatment: restart the backend (plain node, no watcher) and parse something real.
+- The two halves fail differently, and that is why they were verified separately: if the
+  model ignores a prompt rule, scenes come back exactly as before — a silent no-op, not an
+  error. Nothing in CI would have caught it.

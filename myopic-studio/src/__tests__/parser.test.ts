@@ -163,3 +163,54 @@ describe('parsePromptToScene', () => {
     await expect(parsePromptToScene('a scene')).rejects.toThrow(/invalid JSON/);
   });
 });
+
+describe('focusSubjectId validation', () => {
+  test('keeps an id that matches an emitted character', async () => {
+    mockApiResponse({
+      content: [{ type: 'text', text: JSON.stringify(modelScene({
+        characters: [
+          { id: 'char_01', figureName: 'the detective', position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: 1, visible: true, mesh: { kind: 'primitive', shape: 'capsule', dimensions: [0.4, 1.8] } },
+        ],
+        camera: { ...modelScene().camera, focusSubjectId: 'char_01' },
+      })) }],
+      stop_reason: 'end_turn',
+    });
+    const { scene } = await parsePromptToScene('a detective');
+    expect(scene.camera.focusSubjectId).toBe('char_01');
+  });
+
+  test('nulls an id that matches no character rather than storing a dangling reference', async () => {
+    mockApiResponse({
+      content: [{ type: 'text', text: JSON.stringify(modelScene({
+        characters: [
+          { id: 'char_01', figureName: 'the detective', position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: 1, visible: true, mesh: { kind: 'primitive', shape: 'capsule', dimensions: [0.4, 1.8] } },
+        ],
+        camera: { ...modelScene().camera, focusSubjectId: 'char_07' },
+      })) }],
+      stop_reason: 'end_turn',
+    });
+    const { scene } = await parsePromptToScene('a detective');
+    expect(scene.camera.focusSubjectId).toBeNull();
+  });
+
+  test('nulls any id when the scene has no characters at all', async () => {
+    mockApiResponse({
+      content: [{ type: 'text', text: JSON.stringify(modelScene({
+        characters: [],
+        camera: { ...modelScene().camera, focusSubjectId: 'char_01' },
+      })) }],
+      stop_reason: 'end_turn',
+    });
+    const { scene } = await parsePromptToScene('an empty hillside');
+    expect(scene.camera.focusSubjectId).toBeNull();
+  });
+
+  test('leaves a legitimately null focus subject alone', async () => {
+    mockApiResponse({
+      content: [{ type: 'text', text: JSON.stringify(modelScene()) }],
+      stop_reason: 'end_turn',
+    });
+    const { scene } = await parsePromptToScene('an empty rooftop');
+    expect(scene.camera.focusSubjectId).toBeNull();
+  });
+});
