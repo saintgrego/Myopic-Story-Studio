@@ -698,11 +698,8 @@ section); the behaviour was verified in the browser by measuring the canvas.
 
 ### Rules worth remembering
 
-- **The provisional readout state has no in-app repro.** No fixture scene carries a flagged
-  lens or stop, and manufacturing one means either a live parse (needs `ANTHROPIC_API_KEY`)
-  or hand-editing a `.myo` — which is the user's data. It is covered by unit test, not by
-  screenshot. Same will be true of any future flagged-value UI: check whether a fixture can
-  even reach the state before promising visual evidence.
+- **The provisional readout state was verified on 2026-08-08** — see the probe-scene entry
+  at the end of this file. Superseded the earlier note here that it was unit-tested only.
 - **Marker geometry is a plane-ground intersection, not a point.** The focus plane is
   perpendicular to the *view axis*, so on a tilted camera its ground line is offset from the
   naive "walk along the floor" position. The code crosses the view direction with world up to
@@ -1316,3 +1313,40 @@ temperature` working tree, where `App.tsx` is byte-identical to `main`'s.
 No new tests. This is App.tsx chrome, still covered by the "Deliberately untested" note in the
 test-suite section — there's no React-rendering setup in the project, and the behaviour is a
 one-line predicate verified in the live app above.
+
+## Provisional focus readout verified (2026-08-08): DONE, screenshotted
+
+Closes the one v1.3 acceptance criterion that shipped with unit tests but no visual
+evidence: a flagged (`[?]`) lens or stop still computes a readout, labelled provisional.
+
+- **The technique — a throwaway probe scene.** No fixture carries a flagged lens or stop, and
+  the app has no way to *set* one (a flagged `NumberField` renders as an empty input with a
+  `[?]` placeholder; flags only ever arrive from the parser). So the state was reached by
+  writing a temporary `.myo` into `scenes/` with `camera.focalLength` and
+  `camera.depthOfField` both `"[?]"` and `flagged_params` listing them, loading it, capturing
+  it, then deleting the file. **Done in the agent's own container clone, never on the owner's
+  machine**, and `git status` was confirmed clean afterwards — the six real scenes were never
+  touched. Reusable for any future flagged-value UI that the app itself cannot produce.
+- **Result** (probe built on `62a26f9c`'s geometry, focus subject `char_01` at 5.96m):
+  both fields show the `[?]` placeholder, the header badge reads "2 params need review", an
+  amber PROVISIONAL chip sits on the readout, and it prints
+  `Focus at 5.96 m to char_01 · In focus 4.98 – 7.44 m · Depth 2.47 m · Hyperfocal 29.81 m`
+  above the note "Computed from defaults (50mm, f/2.8) for the flagged values above".
+  The ground markers still draw — a flagged lens does not suppress them.
+- **Numbers re-derived independently**, not read off the panel: at 50mm f/2.8 with the
+  subject at 5.96m, hyperfocal 29.81m, near 4.97m, far 7.44m, depth 2.46m. Matches to
+  rounding, so the readout is computing from the real fallback constants rather than
+  printing something plausible.
+
+### Rules worth remembering
+
+- **"Renders correctly when flagged" and "the parser ever flags it" are separate questions,
+  and only the first is now answered.** Whether a real parse ever returns `"[?]"` for a lens
+  or stop is still unknown — the parser prompt tells the model to *infer* reasonable camera
+  defaults when the mood is clear, so it may always fill one in. If a few live parses of
+  camera-silent prompts never flag, the provisional state is correct but unreachable in
+  normal use, and that is worth recording rather than leaving as an untested-looking gap.
+- **A UI state the app cannot itself produce is still verifiable** — write the fixture that
+  produces it, capture, delete. The cost is a few minutes; the alternative is a feature that
+  ships forever on the strength of a unit test. Do it in a disposable clone, and check
+  `git status` afterwards.
