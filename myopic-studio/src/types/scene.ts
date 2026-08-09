@@ -39,8 +39,12 @@ export interface Lighting {
   keyLightElevation: Flagged<number>;  // degrees 0–90
   keyLightColor: Flagged<string>;      // hex
   fillIntensity: Flagged<number>;      // 0–1
+  // Gel tints (PRD v1.6). Optional and neutral-by-default: a `.myo` written
+  // before they existed loads unchanged, because white is a no-op tint.
+  fillColor?: Flagged<string>;         // hex, default '#ffffff'
   rimLight: boolean;
   rimIntensity: Flagged<number>;       // 0–1
+  rimColor?: Flagged<string>;          // hex, default '#ffffff'
   shadowSoftness: Flagged<number>;     // 0–1
   moodPreset: Flagged<MoodPreset>;
 }

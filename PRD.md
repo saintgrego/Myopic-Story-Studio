@@ -316,3 +316,26 @@ This replaces the removed non-goal. It is the whole of the standing policy on ho
 - [ ] Hiding a character does not re-colour the ones after it.
 
 **Consequence worth knowing:** the colours baked into the generated `.glb` files are now **fallbacks only** — they are what you see if a proxy is opened outside the app. They are set to the middle value of each ramp; if the palette is retuned, update them to match or accept the drift.
+
+---
+
+### v1.6 — 9 August 2026: fill and rim colour (gel filters)
+
+**Requested by the owner:** temperature (Kelvin) and gel-filter tints for all three lights, not just key.
+
+*(Logged as v1.6, not v1.5 as originally drafted — v1.5 was already taken by the warm/cool proxy palette on 5 August 2026.)*
+
+**Applying the section 11 test:** colour temperature and tint are already established as blocking information — key colour already drives real shading. Extending that to fill and rim is the same category of decision, just applied to two lights that previously had none. **In scope.**
+
+**Schema change (section 5):** `Lighting` gains `fillColor` (hex, default `#ffffff`) and `rimColor` (hex, default `#ffffff`). Both are cosmetically neutral by default so every existing `.myo` renders identically until edited — no migration needed, same pattern as `environment.setting`'s backward-compat fallback.
+
+**Kelvin is an input, not a field.** The lighting panel gains a colour-temperature control that converts Kelvin to RGB via the standard blackbody approximation and writes the result into the existing key colour field. No new schema field: it is an alternate way of setting a value that already exists, and the scene stores the resulting hex.
+
+**Not in scope:** anything gels do in real cinematography beyond colour — barn doors, diffusion, cut. Tint only.
+
+**Parser:** `fillColor` / `rimColor` inference is **not** part of this pass. The parser leaves both at their `#ffffff` default; this is a UI-only change for now.
+
+**Acceptance (owner-verifiable):**
+- [ ] A saturated `fillColor` visibly tints the shadow side of every object.
+- [ ] A saturated `rimColor` visibly tints the backlight edge, and does nothing when the rim toggle is off.
+- [ ] Every pre-existing `.myo` renders identically to before.

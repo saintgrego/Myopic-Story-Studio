@@ -11,7 +11,7 @@ import {
   verticalHalfExtent,
 } from '../lib/framing';
 import { FALLBACK_F_STOP, FALLBACK_FOCAL_LENGTH_MM, focusRange } from '../lib/dof';
-import type { Environment, MeshRef, SceneFile, Vec3 } from '../types/scene';
+import type { Environment, Flagged, MeshRef, SceneFile, Vec3 } from '../types/scene';
 import { characterColor, propColor } from '../palette';
 import POSES from '../poses.json';
 import PROPS from '../props.json';
@@ -55,6 +55,14 @@ function isExterior(environment: Environment): boolean {
   if (environment.setting === 'Interior') return false;
   const loc = environment.locationName === '[?]' ? '' : environment.locationName;
   return !/\b(interior|indoors?|inside|room|office|apartment|corridor|hallway)\b/i.test(loc);
+}
+
+// Gel tints (PRD v1.6). Absent, flagged, or malformed all resolve to white,
+// which is the no-op tint — that is what keeps every pre-v1.6 `.myo` rendering
+// exactly as it did, with no migration.
+function gelColor(value: Flagged<string> | undefined): string {
+  if (typeof value !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(value)) return '#ffffff';
+  return value;
 }
 
 // Fog: distant blocking reads as distant, and the ground plane's far edge
@@ -410,7 +418,15 @@ export default function Viewport() {
     keyLight.shadow.radius = 1 + num(lighting.shadowSoftness, 0.5) * 7;
     contentGroup.add(keyLight);
 
-    contentGroup.add(new THREE.AmbientLight(0xffffff, num(lighting.fillIntensity, 0.3)));
+    // Fill is the ambient term, so its gel tints everything the key does not
+    // reach — i.e. the shadow side. White (the default) is identical to the
+    // 0xffffff this carried before v1.6.
+    contentGroup.add(
+      new THREE.AmbientLight(
+        new THREE.Color(gelColor(lighting.fillColor)),
+        num(lighting.fillIntensity, 0.3),
+      ),
+    );
 
     if (isExterior(scene.environment)) {
       const sky = new Sky();
@@ -442,7 +458,10 @@ export default function Viewport() {
     );
 
     if (lighting.rimLight) {
-      const rimLightObj = new THREE.DirectionalLight(0xffffff, num(lighting.rimIntensity, 0.5));
+      const rimLightObj = new THREE.DirectionalLight(
+        new THREE.Color(gelColor(lighting.rimColor)),
+        num(lighting.rimIntensity, 0.5),
+      );
       rimLightObj.position.copy(sphericalDirection(azimuth + 180, elevation).multiplyScalar(10));
       rimLightObj.position.y = Math.max(rimLightObj.position.y, 0.5);
       rimLightObj.lookAt(0, 1, 0);

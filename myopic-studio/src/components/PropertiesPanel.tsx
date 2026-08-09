@@ -31,6 +31,7 @@ import {
   SelectField,
   TextField,
 } from './fields';
+import { KELVIN_MAX, KELVIN_MIN, kelvinToHex, nearestKelvin } from '../lib/kelvin';
 import POSES from '../poses.json';
 import PROPS from '../props.json';
 
@@ -59,6 +60,43 @@ const DEFAULT_DIMENSIONS: Record<PrimitiveShape, number[]> = {
   cylinder: [0.5, 0.5, 1],
   cone: [0.5, 1],
 };
+
+/**
+ * Colour temperature (PRD v1.6) is an alternate *input* for a colour field that
+ * already exists — it writes hex into `keyLightColor` and stores no Kelvin
+ * anywhere. The slider position is derived from the current hex rather than
+ * held as local state, so it can never drift out of sync with the colour picker
+ * sitting next to it.
+ */
+function KelvinField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (hex: string) => void;
+}) {
+  const kelvin = nearestKelvin(value);
+  return (
+    <Row label={label}>
+      <div className="flex items-center gap-2">
+        <input
+          type="range"
+          min={KELVIN_MIN}
+          max={KELVIN_MAX}
+          step={100}
+          value={kelvin}
+          onChange={(e) => onChange(kelvinToHex(Number(e.target.value)))}
+          className="w-full min-w-0 cursor-pointer accent-indigo-500"
+        />
+        <span className="w-14 shrink-0 text-right text-xs tabular-nums text-zinc-400">
+          {kelvin}K
+        </span>
+      </div>
+    </Row>
+  );
+}
 
 type LibraryEntry = { name: string; path: string };
 
@@ -320,6 +358,11 @@ export default function PropertiesPanel() {
           value={lighting.keyLightColor}
           onChange={(v) => setField(['lighting', 'keyLightColor'], v)}
         />
+        <KelvinField
+          label="Key Temp"
+          value={lighting.keyLightColor}
+          onChange={(v) => setField(['lighting', 'keyLightColor'], v)}
+        />
         <NumberField
           label="Fill Intensity"
           value={lighting.fillIntensity}
@@ -327,6 +370,11 @@ export default function PropertiesPanel() {
           max={1}
           step={0.05}
           onChange={(v) => setField(['lighting', 'fillIntensity'], v)}
+        />
+        <ColorField
+          label="Fill Gel"
+          value={lighting.fillColor ?? '#ffffff'}
+          onChange={(v) => setField(['lighting', 'fillColor'], v)}
         />
         <CheckboxField
           label="Rim Light"
@@ -340,6 +388,11 @@ export default function PropertiesPanel() {
           max={1}
           step={0.05}
           onChange={(v) => setField(['lighting', 'rimIntensity'], v)}
+        />
+        <ColorField
+          label="Rim Gel"
+          value={lighting.rimColor ?? '#ffffff'}
+          onChange={(v) => setField(['lighting', 'rimColor'], v)}
         />
         <NumberField
           label="Shadow Softness"

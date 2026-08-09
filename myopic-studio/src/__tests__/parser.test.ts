@@ -113,6 +113,31 @@ describe('parsePromptToScene', () => {
     expect(scene.characters[0]).not.toHaveProperty('poseNote');
   });
 
+  // PRD §11 v1.6: gel tints are UI-only for now. The parser must neither ask the
+  // model for them nor pass one through — every parse starts neutral.
+  test('defaults fill and rim gels to neutral white', async () => {
+    mockApiResponse({
+      stop_reason: 'end_turn',
+      content: [{ type: 'text', text: JSON.stringify(modelScene()) }],
+    });
+    const { scene } = await parsePromptToScene('rooftop at dusk');
+    expect(scene.lighting.fillColor).toBe('#ffffff');
+    expect(scene.lighting.rimColor).toBe('#ffffff');
+    // Key colour is untouched by the v1.6 work.
+    expect(scene.lighting.keyLightColor).toBe('#FFD580');
+  });
+
+  test('does not ask the model to infer gel colours', async () => {
+    mockApiResponse({
+      stop_reason: 'end_turn',
+      content: [{ type: 'text', text: JSON.stringify(modelScene()) }],
+    });
+    await parsePromptToScene('a scene lit through a green window');
+    const body = JSON.parse((globalThis.fetch as jest.Mock).mock.calls[0][1].body);
+    expect(body.system).not.toContain('fillColor');
+    expect(body.system).not.toContain('rimColor');
+  });
+
   // PRD §11 v1.3: props may now carry a library glTF proxy. Two things have to
   // hold — the model is actually told the library exists, and a proxy it picks
   // reaches the scene unmodified (the post-processing only touches poseNote).

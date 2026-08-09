@@ -1088,3 +1088,135 @@ generator plus the three `.glb` outputs, no schema, viewport or parser change.
 
 **What this is not.** It is a wooden artist's mannequin, and it is nowhere near the owner's
 reference render. That gap is an asset-class gap, not a tuning gap — see the proposal doc.
+
+## Live parse gate re-run after the merge (2026-08-08): PASS
+
+The gate above was run against `server/parser.js` as it stood *before* the merge with
+`origin/main`. That merge changed the same file — it added #5's focus-subject rule and dropped
+the superseded "prop meshes are ALWAYS primitive" bullet — so proxy selection was re-verified
+against the merged parser rather than assumed to have survived. Backend restarted first
+(started 15:13:42 against a `parser.js` last modified 15:03:52).
+
+Prompt: open-plan living room, early evening — sofa, bookshelf, armchair, floor lamp, dining
+table with four chairs, kitchen counter, window, door, plus a television on a low cabinet, and
+two characters (Maya sitting, her brother standing).
+
+**14 props — 12 library proxies, 2 primitive fallbacks. Unchanged from the pre-merge run.**
+
+- Proxied: `sofa`, `bookshelf`, `armchair`, `floor-lamp`, `dining-table`, `dining-chair` ×4,
+  `counter`, `window`, `door`. 9 distinct prop paths + 2 pose paths, **all 11 checked against
+  `props.json`/`poses.json` and against the files on disk — no invented paths**. 9 of 12 prop
+  library entries exercised.
+- Fallback: `low cabinet` and `television`, neither of which has a proxy. Honest fallback, and
+  no `propNote` anywhere in the payload (correct — there is no such flag by design).
+
+**Conventions held:**
+
+- `window` at `position.y = 0.9` — the sill-height exception from its `props.json` hint applied
+  again, not floored at 0. Still the subtle one, still correct.
+- `television` at `y = 0.5` on a `low cabinet` whose box is exactly 0.5 m tall, both at
+  x = -4.5, z = 1. Stacking is exact; every floor-standing prop is at `y = 0`.
+- Every prop `scale` is `{1,1,1}` — the Milestone 3 dimensions-into-scale pattern did not recur.
+- Characters got `sitting.glb` / `standing.glb` at `scale: 1`, matching the described postures.
+
+**Also confirms the merge did not regress #5:** `camera.focusSubjectId` came back as `char_01`
+(Maya, who the prompt says the shot is focused on) — a real id belonging to an emitted
+character, not `[?]` and not a dangling reference.
+
+`flaggedParams` was `["environment.weather", "lighting.rimIntensity", "camera.movement",
+"camera.aspectRatio"]` — four genuinely unstated values, no false positives.
+
+## PRD v1.6 — gel filters and colour temperature (2026-08-09)
+
+Owner request: temperature (Kelvin) and gel-filter tints for all three lights, not just key.
+**Amendment logged in PRD §11 before any code was written**, per §10.
+
+**Logged as v1.6, not v1.5 as the request drafted it** — v1.5 was already taken by the
+warm/cool proxy palette (5 August 2026). Nothing else about the amendment changed.
+
+### Schema
+
+`Lighting` gains `fillColor?` and `rimColor?` (hex, default `#ffffff`), in `src/types/scene.ts`.
+Both are **optional and neutral by default**, which is the whole backward-compatibility story:
+white is a no-op tint, so a `.myo` written before v1.6 renders bit-identically without a
+migration — the same trick `environment.setting` uses, but cheaper, because the fallback is a
+constant rather than a sniff.
+
+Typed `Flagged<string>` rather than plain `string` to match the neighbouring `keyLightColor`.
+No practical difference (`Flagged<string>` collapses to `string`), but the panel's colour field
+lets a user type anything, so the sentinel is genuinely reachable.
+
+Defaults are written at the three places a `Lighting` is constructed: `server/parser.js`
+(post-processing, alongside the poseNote strip), `src/testUtils/sceneFixture.ts`, and the
+panel's `?? '#ffffff'` read. There is no other constructor — there is no "new empty scene" path.
+
+### Viewport wiring
+
+`gelColor()` in `Viewport.tsx` resolves absent / `[?]` / malformed to `#ffffff`. It feeds:
+
+- **fill** → the `AmbientLight`'s colour, which was hardcoded `0xffffff`. Because fill is the
+  ambient term, its gel tints precisely what the key does not reach — the shadow side.
+- **rim** → the rim `DirectionalLight`'s colour, likewise hardcoded `0xffffff`. Gated by the
+  existing `rimLight` toggle, unchanged.
+
+**Key was deliberately not touched.** It keeps its own `'[?]' ? '#ffffff'` inline guard rather
+than being routed through `gelColor()` — `gelColor` also swallows malformed hex, and quietly
+changing what a half-typed key colour does was not in scope.
+
+### Kelvin is an input, not a field
+
+`src/lib/kelvin.ts` — Tanner Helland's blackbody approximation, 1000–12000K. The panel's
+`KelvinField` converts and writes hex into the **existing** `keyLightColor`. No Kelvin number is
+stored anywhere, in the scene model or on disk.
+
+**The slider position is derived from the stored hex (`nearestKelvin`), not held as local
+state.** Deliberate: a Kelvin control that keeps its own state drifts the moment someone uses
+the colour picker sitting next to it, and this app's browser-automation notes (Milestones 2/4)
+are already a catalogue of stale-control bugs. Cost, accepted: a gel far off the blackbody locus
+resolves to *some* temperature — the control reports "nearest temperature to this", not a
+round-trip. Verified: 6600K is exactly `#ffffff`, and 1800/3200/5600/6600/9000K round-trip to
+within one 100K slider step.
+
+### Parser: NOT extended, on purpose
+
+`server/parser.js` sets both gels to `#ffffff` and **nothing more**. The model is not asked to
+infer them — the system prompt does not mention `fillColor` or `rimColor`, and there is a test
+asserting it stays that way. This is a UI-only pass, as specified.
+
+### Gates — all pass
+
+| Gate | Result |
+| --- | --- |
+| `npx tsc --noEmit` | clean |
+| `npm run test:ci` | **88 passed, 9 suites** (was 78/8 — +8 in a new `kelvin.test.ts`, +2 in `parser.test.ts`) |
+| `CI=true npm run build` | compiled, no ESLint errors (+566 B gzip) |
+
+### Backward compatibility — verified in the app, not assumed
+
+Backend restarted after the `parser.js` edit before any of this (the standing rule).
+
+Loaded `Pier at Dawn — Solitary Woman` (exterior, sky + fog + rim) before and after the change:
+**renders identically** — same shading, same fog, same horizon. The interior
+`Apartment Window Talk — Evening` likewise. The panel opens on an untouched file showing
+`Fill Gel #ffffff` / `Rim Gel #ffffff`, which is the no-op case by construction.
+
+Note for anyone repeating this: the `.myo` count in the original request was four; there are
+**seven** on disk. All seven load through the same neutral-default path.
+
+**A pixel-hash comparison was attempted first and abandoned** — `gl.readPixels` needs to run
+inside a `requestAnimationFrame` right after the app's draw, and rAF does not fire while the
+browser preview pane is hidden, so the harness hung. Screenshots force a paint and do work.
+Worth knowing before anyone tries to automate a render-diff here.
+
+### Gel behaviour, demonstrated
+
+Driving the live panel (via `javascript_tool`, inputs found by `<label>` text — the standing
+rule from Milestone 4):
+
+- `Fill Gel #ff2a6d` at 0.9 → pier and figure visibly magenta on the shadow side.
+- Fill intensity to 0, `Rim Gel #00e5ff` at 1.0 → magenta gone entirely, cyan backlight on the
+  pier and figure. Confirms each gel acts through its own light and only its own light.
+- Key Temp slider to 2000K → `Key Color` became `#ff890e`, slider read back 2000K from the hex.
+
+No console errors. **Nothing was saved** — the dirty marker (`Save .myo *`) was left unsaved and
+the page reloaded to discard, so `scenes/` is untouched by this verification.

@@ -181,13 +181,19 @@ async function parsePromptToScene(prompt) {
     if (!known) camera.focusSubjectId = null;
   }
 
+  // Gel tints (PRD v1.6) are a UI-only feature for now: the model is not asked
+  // to infer them, so every parse starts neutral and the user gels by hand.
+  const lighting = parsed.lighting ?? {};
+  lighting.fillColor = lighting.fillColor ?? '#ffffff';
+  lighting.rimColor = lighting.rimColor ?? '#ffffff';
+
   const scene = {
     sceneId: randomUUID(),
     title: parsed.title ?? 'Untitled Scene',
     created: new Date().toISOString(),
     prompt,
     environment: parsed.environment,
-    lighting: parsed.lighting,
+    lighting,
     camera,
     characters: parsed.characters ?? [],
     props: parsed.props ?? [],
