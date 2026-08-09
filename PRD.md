@@ -223,7 +223,7 @@ This replaces the removed non-goal. It is the whole of the standing policy on ho
 - [ ] Change a character's pose in the properties panel, save, reload — the pose persists (it's just the mesh path persisting).
 - [ ] Add a new pose to the generator's table, re-run it, and use that pose in a scene without touching viewport code.
 
-**Still out, and unaffected by this amendment:** runtime articulation of any kind (bones, IK, a pose editor), animation between poses (non-goal #6 stands), facial expression, and body-type variation. If a pose can't be expressed as "another `.glb` in the folder," it doesn't belong under this amendment.
+**Still out, and unaffected by this amendment:** runtime articulation of any kind (bones, IK, a pose editor), animation between poses (non-goal #6 stands), facial expression, and body-type variation (**body-type variation narrowed in v1.8: a fixed, small set of authored figures is in; body type as an adjustable dial stays out**). If a pose can't be expressed as "another `.glb` in the folder," it doesn't belong under this amendment.
 
 **Deliberately not decided here:** section 9's asset-pipeline question stays open. The generated proxy mannequins are the pose library's *current* content, not a commitment — a Mixamo or MakeHuman figure exported per-pose to `.glb` drops into the same folder under the same contract. Choosing that source remains the owner's call.
 
@@ -367,3 +367,34 @@ This replaces the removed non-goal. It is the whole of the standing policy on ho
 - [ ] `npx tsc --noEmit`, `npm run test:ci` and `CI=true npm run build` stay green.
 
 **Deliberately not decided here:** whether *props* ever gain authored geometry. This amendment covers characters only; `src/props.json` and its proxies are untouched and stay in scope for the generator.
+
+### v1.8 — 10 August 2026: a second figure in the pose library
+
+**Requested by the owner on 10 August 2026**, immediately after v1.7's pipeline landed.
+
+**This one needs an amendment because v1.2 said no.** v1.2's "still out" list names **body-type variation** explicitly, alongside rigging and facial expression. Nothing about v1.7 changed that — it swapped one figure for a better one. A second figure of a different build is the thing v1.2 ruled out, so it is reopened here deliberately rather than slipped in as content.
+
+**Applying the section 11 test.** Blocking asks who is where and what the lens sees. Two characters in a two-shot who are the same figure at the same height are harder to tell apart than they should be, and a director reading their own storyboard should not have to remember which capsule is which. That is a legibility argument about *blocking*, not a fidelity argument — it passes. What does **not** pass, and stays out: body-type as a *dial* (height, build, age sliders), which is a character-customisation feature and would put variation back into the schema.
+
+**Scope: two figures, both from the same CC0 bundle.** `GEO-body_male_realistic` and `GEO-body_female_realistic`. Not a system for arbitrary figures — a second one, because one is not enough to tell two people apart.
+
+**Naming, and the compatibility constraint that drives it.** Existing `.myo` files on disk reference `/assets/poses/standing.glb` and its three siblings. Those paths keep working and keep their current meaning, so the library grows by suffix rather than by rename:
+
+- `standing`, `sitting`, `crouching`, `lying` — **the default figure**, used when the description does not indicate otherwise. It is the male mesh today; the name says "default" rather than "male" so that the parser has a rule it can actually apply, and so a future third figure does not need a fourth naming convention.
+- `standing-female`, `sitting-female`, `crouching-female`, `lying-female` — chosen when the description indicates a woman.
+
+A rename to a symmetric `-male`/`-female` pair would read better and is deliberately **not** done here: it would break every saved scene for a cosmetic gain, and `.myo` files are the user's data.
+
+**What changed in this document**
+
+- **v1.2's "still out" list is narrowed**: body-type variation is in, bounded to a fixed, small set of authored figures. Rigging, IK, pose editors, morphs, facial expression and animation are untouched and stay out. Marked in place.
+- **No schema change, no parser code change, no `.myo` change.** `poses.json` gains rows; `server/parser.js` builds its pose list from that file at require time, so the parser learns the new figures from their hints alone.
+
+**Acceptance**
+
+- [ ] Eight poses in the panel dropdown; a scene can put two visibly different figures in one shot.
+- [ ] Every saved `.myo` that references the original four paths still loads and renders unchanged.
+- [ ] All eight `.glb`s measure `min.y = 0` and face +Z.
+- [ ] A prompt describing a woman parses to a `-female` pose mesh.
+
+**Still out:** any third figure without a further amendment, body-type as an adjustable parameter, and figure choice as a field on `Character` — it rides the `mesh` reference like everything else.
