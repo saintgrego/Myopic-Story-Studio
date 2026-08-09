@@ -1815,6 +1815,48 @@ produced output that looked like an answer. The grounding work at the start of t
 the rigging work at the end were the same lesson twice: *derive the value, and make the
 un-derivable case loud.*
 
+## Camera aim height now follows shot type (2026-08-10): fixed in framing.ts
+
+Found by parsing a beach-house scene that asked for "med-close, both women visible from
+about chest up" and getting a full-length shot instead. Not a parser problem — the request
+was unrepresentable.
+
+`aimPointForCharacter()` aimed at `NOMINAL_FIGURE_MID_HEIGHT` (0.9 m — hip height) for
+*every* shot, and `lookAt` puts the aim point at the exact centre of frame. So the frame was
+always vertically centred on the hips, and including a 1.7 m figure's head required a frame
+half-height of 0.8 m, which drags the bottom of frame down to the ankles. **No camera
+position and no focal length can fix that** — moving the camera scales both halves of the
+frame together. The low-angle escape (aim below the subject so the frame rides up) needs the
+camera under 1 m looking upward, which contradicts an Eye Level shot.
+
+**Shot type now drives the aim**, because it is the field that already declares how tight the
+framing is. `AIM_FRACTION` maps each shot to the fraction of subject height the frame centres
+on — ECU 0.94 (eye line) down to LS/ELS at mid-height — and `aimPointForCharacter` multiplies
+it by the subject's height (exact for a primitive, the nominal 1.7 m figure for a `.glb`,
+whose real bounds are not known synchronously: GLTFLoader is still in flight when the camera
+is positioned).
+
+**Backward compatibility is derived, not asserted.** The wide-shot fraction is
+`NOMINAL_FIGURE_MID_HEIGHT / NOMINAL_FIGURE_HEIGHT`, so a `.glb` figure in an LS/ELS — or
+with a flagged or absent shot type — aims *exactly* where it did before. Writing the obvious
+`0.53` instead would have missed by a millimetre and silently re-framed every existing wide
+shot. A primitive character does shift, by 0.029 of its height (~5 cm on a 1.8 m capsule),
+because its old aim was its exact geometric centre; immaterial at wide framing, but recorded
+because it is a shift rather than a no-op.
+
+**Verified:** the same beach-house scene at MCU, camera (0, 1.45, 0.55), 50 mm — both figures
+framed mid-chest up with heads in frame, which was unreachable at any camera position before.
+Gates green: `npx tsc --noEmit`, **114/114** (was 111), `CI=true npm run build`.
+
+### Rules worth remembering
+
+- **`lookAt` centres the aim point, so aim height alone bounds what a shot can contain.**
+  Reach for the aim before reaching for the lens or the camera position — the other two
+  cannot compensate for it.
+- **When a change is meant to preserve old behaviour, derive the constant that preserves it.**
+  `0.9 / 1.7` is exact; `0.53` is a millimetre off and would have moved every saved wide shot
+  by a hair for no reason. Same rule as the pose grounding fix, one file over.
+
 ## Set pieces (2026-08-11): PRD §11 v1.9, schema + viewport, built
 
 Walls, floors, ceilings, doors and windows, placed by hand and toggled by category. Scope
