@@ -1565,3 +1565,67 @@ Gates green: `npx tsc --noEmit`, `npm run test:ci` (111/111, 9 suites), `CI=true
   `data instanceof ArrayBuffer` before you check the bytes.
 - **CRA jest overrides: arrays replace, objects merge.** Copy the defaults you still want out
   of `react-scripts/scripts/utils/createJestConfig.js` when overriding an array key.
+
+## Blender spike — headless → .glb → viewport (2026-08-10): PASS, source-agnostic
+
+Plan §4.3's de-risking run, done before the licence fork and with no base mesh chosen. No
+PRD amendment yet — §11 v1.7 is required before the *pipeline* lands; nothing here touches
+app code, `poses.json`, or the committed pose library.
+
+`scripts/blender/spike-export.py` builds its own geometry (an orientation probe, and
+Suzanne), grounds it, and exports `.glb` under
+`Blender --background --factory-startup --python`. Blender 5.2.0 LTS, its own Python
+3.13.13. `scripts/measure-glb.mjs` is the acceptance harness — the §2.2 grounding
+measurement pointed at arbitrary files, reporting instead of asserting, which is what a
+pipeline spike needs.
+
+| file | y bounds | grounded |
+| --- | --- | --- |
+| orient-probe.glb | 0.0000 → 0.4500 | yes |
+| suzanne.glb | 0.0000 → 1.5750 | yes |
+
+**Grounding survives the export.** Dropping the objects so their world min-Z is 0 *in
+Blender* lands at exactly `min.y = 0` in the `.glb`. The convention is enforceable at the
+exporter, the same place the procedural generator enforces it.
+
+**The axis landmine did not fire, and §4.4 overstated it.** The probe carries a named cone
+on Blender **−Y** (the direction a Blender figure faces) and a marker on Blender **−X**.
+Measured in the exported file:
+
+| marker | Blender | glTF |
+| --- | --- | --- |
+| nose | (0, **−0.8**, 0.3) | (0, 0.3, **+0.8**) |
+| leftmark | (**−0.8**, 0, 0.3) | (**−0.8**, 0.3, 0) |
+
+So the default export maps `(x, y, z)_blender → (x, z, −y)_glTF`: a −90° rotation about X,
+**not** a mirror. A Blender figure facing −Y arrives facing **+Z**, which is exactly the
+app's convention — with the exporter's defaults and no flags. Determinant is +1, so there is
+no handedness flip to hunt for in a limb that comes out the wrong way round.
+
+**Viewport confirmed, and it re-materials as PRD §11 promises.** Temporarily swapped
+Suzanne in over `standing.glb` and loaded "Two Detectives — Office at Night": she renders
+standing on the floor at the right scale, in warm palette grey rather than her own exported
+material — `LIBRARY_PATHS` picked her up because the *path* is in `poses.json`, with no code
+change. `git checkout` restored the file; re-measured all four poses at `min.y = 0` after.
+Gates re-run green (111/111).
+
+### Rules worth remembering
+
+- **Measure the axis convention with a named asymmetric marker, don't reason about it.**
+  Two named nodes and one export answered in five minutes what §4.4 budgeted an hour of
+  confusion for, and answered it *against* the plan's expectation. Reading the exporter's
+  own axis settings would not have shown the composed result.
+- **`--factory-startup` is not optional**, and neither is doing the grounding inside the
+  export step. Both push a class of "works on my machine" failure out of the pipeline
+  before it exists.
+- **A spike that fakes the source is still a real spike.** Nothing in the mechanical chain
+  — headless invocation, grounding, axes, palette re-material, viewport load — depended on
+  which mesh went in, which is precisely why the licence decision can wait for the fork.
+
+### Open / not yet known
+
+- **Size is unmeasured for a real asset.** Suzanne is 69 KB, but she is low-poly; §4.4's
+  1–5 MB per pose estimate is untested and the `assets-src/` storage question stays open.
+- **Rigging and posing are untouched.** The spike exports static geometry. Applying the four
+  library poses to an authored figure (Rigify or an already-rigged source) is the part of
+  §4.2 that is still all risk.
