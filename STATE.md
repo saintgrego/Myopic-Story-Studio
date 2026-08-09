@@ -1693,3 +1693,60 @@ Worth reading before touching this script — none of the three presented as wha
 - **Check where the source file parks its geometry before measuring anything.** An asset
   library laid out in a row is normal; code that assumes origin-centred is the anomaly.
 - **`matrix_basis` for posing is a trap on any parented bone.** Use `pose_bone.matrix`.
+
+## Second figure in the pose library (2026-08-10): PRD §11 v1.8, built
+
+Eight poses now: four on `GEO-body_male_realistic`, four on `GEO-body_female_realistic`,
+both from the same CC0 bundle. `public/assets/poses/` is 4.0 MB — 500 KB per file, evenly.
+
+**The female figure exported 2.9× larger until shading was normalised**, and the cause is
+worth knowing because it is invisible in Blender. Both source meshes have identical topology
+(10,582 verts, 10,590 quads), but the female ships with split normals; glTF cannot share a
+vertex between faces that disagree about its normal, so the same 21,160 triangles needed
+42,340 vertices against the male's 12,010. Clearing custom split normals and shading smooth
+before export fixes the size *and* a real appearance bug — two figures in one shot that catch
+the light differently read as two kinds of object rather than two people.
+
+**This needed an amendment, and nearly did not get one.** v1.2's "still out" list names
+**body-type variation** in the same breath as rigging and facial expression. v1.7 did not
+touch that — it swapped one figure for a better one. A second figure of a different build is
+precisely what v1.2 ruled out, so v1.8 reopens it explicitly and narrows v1.2's line in
+place. The tell that this was not just content: the request sounded like "add a row to the
+library", which v1.2 blesses outright, and the prohibition was two amendments away from the
+thing being edited.
+
+**Each figure is measured and rigged separately**, which the numbers justify — the two bodies
+are not a scale factor apart:
+
+| | male | female |
+| --- | --- | --- |
+| height | 1.690 | 1.639 |
+| crotch | 0.755 | 0.740 |
+| armpit | 1.308 | 1.246 |
+| ankle | 0.108 | 0.120 |
+
+Sharing one skeleton would have put the female figure's shoulders 6 cm above her armpit.
+
+**Naming: the original four paths keep their meaning.** Saved `.myo` files reference
+`/assets/poses/standing.glb`; renaming to a symmetric `-male`/`-female` pair would read
+better and would break every one of them, and those files are the user's data. So the bare
+names are the **default** figure — not "the male figure" — which is also the only phrasing
+that gives the parser a rule it can apply. `-female` is chosen when the description indicates
+a woman. The hints in `poses.json` carry that instruction; `server/parser.js` builds its pose
+list from the file and needed no code change.
+
+**Verified:** all eight `.glb`s at `min.y = 0`; a live parse (against a **restarted** backend
+— `parser.js` requires `poses.json` at load, so the running one had the old four) of "A woman
+stands… A man crouches…" returned `standing-female.glb` and `crouching.glb`; the existing Two
+Detectives scene still loads and renders its original `standing.glb` unchanged; both figures
+screenshotted together in one shot, palette-grey and grounded. Gates green (111/111 —
+`poses.test.ts` iterates `poses.json`, so it now grounds-checks all eight without an edit).
+
+### Rules worth remembering
+
+- **A prohibition can live two amendments away from the thing you are editing.** The block on
+  this was in v1.2's "still out" list, not in v1.7 which built the pipeline. Grep the whole of
+  §11 for the *capability*, not just the section you are working in.
+- **A test that iterates a manifest scales for free.** Adding four assets added four grounding
+  assertions with no test edit. Worth preferring over enumerating cases when the manifest
+  already exists.
