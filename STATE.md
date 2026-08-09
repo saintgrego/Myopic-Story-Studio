@@ -798,10 +798,24 @@ remembered to run them.
   #3's branch contained #1's commits, and squashing would have put differently-SHA'd copies
   of the same changes on `main`, making #3's diff re-contain #1's work and likely conflict.
   Preserve commits when something is stacked; squash only leaf PRs.
-- **GitHub only auto-retargets a stacked PR when the base branch is deleted.** After #1
-  merged, #3 still pointed at `claude/push-file-u861cy` — merging it there would have landed
-  the work on a stale branch instead of `main`. The base had to be repointed at `main`
-  explicitly, after which the diff was verified to contain only #3's own eight files.
+- **Do not rely on GitHub retargeting a stacked PR. Repoint the child at `main` BEFORE
+  merging the parent.** Both halves of this were learned the hard way, three days apart:
+  - *Parent merged, branch kept (2026-08-04).* After #1 merged, #3 still pointed at
+    `claude/push-file-u861cy` — merging it there would have landed the work on a stale
+    branch instead of `main`. The base had to be repointed explicitly, after which the diff
+    was verified to contain only #3's own eight files.
+  - *Parent merged, branch deleted (2026-08-10).* **This closes the child PR rather than
+    retargeting it, and the close is irreversible.** `gh pr merge 17 --squash
+    --delete-branch` left #18 `CLOSED`; `gh pr reopen 18` fails with *"Could not open the
+    pull request"* and `gh pr edit 18 --base main` fails with *"Cannot change the base
+    branch of a closed pull request"*, because the base branch it needs no longer exists.
+    GitHub documents automatic retargeting for this case; it did not happen here, so treat
+    it as something that may work rather than something to plan around. Recovery is cheap
+    but leaves litter: rebase the child onto `main`, force-push, open a **replacement** PR
+    (#18 → #19), and the dead PR number stays in the history pointing at nothing.
+  - The safe order, whichever way the parent is merged: **retarget the child to `main`
+    first, then merge the parent, then merge the child.** Costs one command and removes
+    both failure modes.
 - **CI enforces lint, via the build.** Actions sets `CI=true`, which makes `react-scripts
   build` treat ESLint warnings as errors. There is no separate lint script, so the build step
   *is* the lint gate — verify `CI=true npm run build` locally before pushing, since a plain
