@@ -11,6 +11,7 @@ import {
   verticalHalfExtent,
 } from '../lib/framing';
 import { FALLBACK_F_STOP, FALLBACK_FOCAL_LENGTH_MM, focusRange } from '../lib/dof';
+import { resolveLightColor } from '../lib/lighting';
 import type { Environment, MeshRef, SceneFile, Vec3 } from '../types/scene';
 import { characterColor, propColor } from '../palette';
 import POSES from '../poses.json';
@@ -410,7 +411,15 @@ export default function Viewport() {
     keyLight.shadow.radius = 1 + num(lighting.shadowSoftness, 0.5) * 7;
     contentGroup.add(keyLight);
 
-    contentGroup.add(new THREE.AmbientLight(0xffffff, num(lighting.fillIntensity, 0.3)));
+    // PRD §11 v1.6: fill and rim carry their own colour. Absent (pre-v1.6 .myo) or
+    // flagged resolves to white, which is exactly the literal these lights used
+    // before the amendment — that is what makes old scenes render unchanged.
+    contentGroup.add(
+      new THREE.AmbientLight(
+        new THREE.Color(resolveLightColor(lighting.fillColor)),
+        num(lighting.fillIntensity, 0.3),
+      ),
+    );
 
     if (isExterior(scene.environment)) {
       const sky = new Sky();
@@ -442,7 +451,10 @@ export default function Viewport() {
     );
 
     if (lighting.rimLight) {
-      const rimLightObj = new THREE.DirectionalLight(0xffffff, num(lighting.rimIntensity, 0.5));
+      const rimLightObj = new THREE.DirectionalLight(
+        new THREE.Color(resolveLightColor(lighting.rimColor)),
+        num(lighting.rimIntensity, 0.5),
+      );
       rimLightObj.position.copy(sphericalDirection(azimuth + 180, elevation).multiplyScalar(10));
       rimLightObj.position.y = Math.max(rimLightObj.position.y, 0.5);
       rimLightObj.lookAt(0, 1, 0);

@@ -39,8 +39,14 @@ export interface Lighting {
   keyLightElevation: Flagged<number>;  // degrees 0–90
   keyLightColor: Flagged<string>;      // hex
   fillIntensity: Flagged<number>;      // 0–1
+  // PRD §11 v1.6 (gel filters). Optional because every .myo written before the
+  // amendment lacks them; absent means '#ffffff', which is cosmetically neutral,
+  // so pre-v1.6 scenes render identically and need no migration. Resolve with
+  // resolveLightColor() in src/lib/lighting.ts rather than reading directly.
+  fillColor?: Flagged<string>;         // hex, default '#ffffff'
   rimLight: boolean;
   rimIntensity: Flagged<number>;       // 0–1
+  rimColor?: Flagged<string>;          // hex, default '#ffffff'
   shadowSoftness: Flagged<number>;     // 0–1
   moodPreset: Flagged<MoodPreset>;
 }

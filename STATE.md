@@ -1126,3 +1126,114 @@ character, not `[?]` and not a dangling reference.
 `flaggedParams` was `["environment.weather", "lighting.rimIntensity", "camera.movement",
 "camera.aspectRatio"]` — four genuinely unstated values, no false positives.
 
+## Gel filters — fill and rim colour (2026-08-08): DONE, PRD §11 amended to v1.6 first
+
+### What changed
+
+- **Amendment before code, per §11.** The owner asked for temperature and gel tint on all
+  three lights. Key colour already drove real shading, so extending the same information to
+  fill and rim passes §11's blocking test by the same argument that already licensed key
+  colour — logged as **v1.6** in PRD.md §11, plus the schema line in §5, before a line of
+  code was written. Colour only: barn doors, diffusion, and cut are explicitly out.
+- **Schema (`src/types/scene.ts`).** `Lighting` gains `fillColor?` and `rimColor?`, both
+  optional hex, both defaulting to `#ffffff`. Optional rather than required is the whole
+  backward-compat story: no `.myo` on disk has these fields, absent resolves to white, and
+  white is exactly the literal the two lights used before — so nothing migrates. Same shape
+  of fallback as `environment.setting`.
+- **New `src/lib/lighting.ts`** — `resolveLightColor`, `kelvinToRgb`/`kelvinToHex`,
+  `applyGel`, `gelledColor`, and the `GELS` table. The maths sits outside the component and
+  outside `Viewport.tsx` for the reason v1.3 established: the panel and the renderer need the
+  same answer, and anything inside Viewport is untestable (no WebGL under jsdom).
+- **New `src/components/KelvinGelControl.tsx`** — *one* control, mounted three times in
+  `PropertiesPanel` (key, fill, rim), the way `MeshEditor` already serves both characters and
+  props. A fourth light would be a fourth `<KelvinGelControl>`, not new code.
+- **`Viewport.tsx`:** the `AmbientLight` (fill) and the rim `DirectionalLight` take
+  `resolveLightColor(...)` instead of a hardcoded `0xffffff`. Key light handling was not
+  touched — it already worked.
+- **Parser untouched, deliberately.** `server/parser.js` has no diff: the fields are optional,
+  so an un-emitted field is the documented default. Inferring gels from mood language
+  ("cold and clinical" → steel blue) is a separate decision and was **not** smuggled in here.
+
+### Evidence
+
+- **The four… six pre-existing scenes render byte-for-byte identically.** The repo has *six*
+  `.myo` files, not four; all six were checked rather than the four the request named. Method:
+  Playwright + headless Chromium (swiftshader) against the live dev stack, screenshot the
+  viewport canvas, `git checkout --detach` the base commit, let CRA recompile, screenshot
+  again from the same code path, check the branch back out. Every pair is **identical by
+  md5**, not merely similar:
+
+  | scene | before/after |
+  | --- | --- |
+  | `1c39ce18` Apartment Window Talk — Dusk | identical |
+  | `4f4fefce` Pier at Dawn | identical |
+  | `62a26f9c` Two Detectives | identical |
+  | `7eb7999a` (exterior, rim at 0.65) | identical |
+  | `af4246a5` Server Room — Night (interior) | identical |
+  | `d330bdf7` Distant Figure at Sunset (rim off, fill 0.6) | identical |
+
+  Covers interior and exterior, rim on and rim off, and a scene with a flagged `rimIntensity`.
+  **Re-captured against `ef97c44`** after rebasing onto it — that commit rebuilt the pose
+  `.glb` meshes, so the first round's screenshots contained different mannequin geometry and
+  no longer proved anything about the current base. The re-run doubles as a harness sanity
+  check: `4f4fefce` and `62a26f9c` *do* differ between the two bases (the new mannequins),
+  while every before/after pair on a single base is identical. A comparison that can only
+  ever say "identical" is not evidence.
+- **The controls drive real shading.** Driven through the actual panel UI, not the store:
+  - `af4246a5`: fill → Steel Blue @ 8000K, rim → Straw @ 3200K. Scene JSON read back as
+    `"fillColor": "#92b4e8"`, `"rimColor": "#ff9d4d"`, and `keyLightColor` **unchanged** at
+    `#66CCFF` — the three controls are independent.
+  - `d330bdf7` (fill 0.6): fill → Congo Blue @ 12000K → `#2b279e`. The figure goes from
+    fill-lit mid blue to deep blue-violet.
+  - `7eb7999a` (rim 0.65): rim → Primary Red @ 2000K → `#e01a03`. The rim-lit side of the
+    scene goes olive → red; the key-lit side is untouched.
+- **Gates:** `tsc --noEmit` clean, `test:ci` **110/110** (78 on `08c6771` before this branch —
+  `lighting.test.ts` adds 30, `sceneStore.test.ts` adds 2), `CI=true npm run build` compiled.
+  Re-run on the rebased tree each time, never carried over: `main` moved three times during
+  this work (`9102951`, `ef97c44`, `08c6771`) and the baseline count moved with it.
+- Nothing was saved during any of this: `git status` on `scenes/` and `storyboard.json` is
+  empty. No `.myo` on disk carries `fillColor`/`rimColor` yet.
+
+### Rules worth remembering
+
+- **`DEFAULT_KELVIN` is 6600, not the conventional 5600 "daylight".** 6600K is where the
+  Helland approximation lands exactly on `#ffffff`, so the control opens agreeing with the
+  field's own default. At 5600 the control would open slightly warm and moving the gel-cut
+  slider alone would silently shift colour. There is a unit test asserting
+  `kelvinToHex(DEFAULT_KELVIN) === '#ffffff'` — if you retune the curve, that test is the
+  one that tells you the control's neutral has drifted.
+- **Kelvin and gel are generators, not state.** The scene stores one hex per light and
+  nothing else. Two different (temperature, gel) pairs produce the same hex, so persisting
+  them would create a second source of truth for a light's colour — the same trap v1.2
+  rejected for poses. Consequence: the sliders don't back-derive from a loaded hex, and read
+  as their own last position until moved. That is deliberate; don't "fix" it by adding
+  `fillKelvin` to the schema.
+- **The brightest channel out of `kelvinToRgb` is always 255.** That's what keeps temperature
+  a tint and not a dimmer — intensity stays `fillIntensity`/`rimIntensity`'s job. If a future
+  edit normalises differently, changing colour temperature will start changing exposure too.
+- **Byte-identical screenshot comparison works in this container and is worth the setup.**
+  Headless Chromium at `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` with
+  `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader` renders the viewport
+  deterministically — the same scene twice produces the same md5. That makes "renders
+  unchanged" a checkable claim rather than an eyeball one. Note the browser path is
+  `chromium-1194`, not the `chromium` symlink dir, which has no `chrome-linux/`.
+- **A §11 amendment number is not yours until you rebase onto current `main`.** This one was
+  drafted as v1.5, renumbered to v1.4 to close a gap, and finally landed as **v1.6** — because
+  while it was in review `main` merged its own v1.4 (prop proxy library) and v1.5 (warm/cool
+  palette). Numbers are claimed by whichever branch merges first, and the number is quoted in
+  code comments and test names as well as in PRD.md, so a late renumber touches ~8 files.
+  Fetch `main` and read §11's last heading immediately before writing the amendment, and
+  renumber as the last step before pushing rather than the first.
+- **Renumbering with a blanket `sed` will corrupt someone else's history.** Rewriting `v1.4`
+  → `v1.6` across STATE.md also rewrote three lines belonging to `main`'s prop-library
+  section, and one comment in `Viewport.tsx` that main had just added. Check the result with
+  `git diff origin/main` and confirm the shared files are *pure additions* — a `-` line in a
+  file you only meant to append to is the tell.
+- **Capture the "before" render with `git checkout --detach <base>`, never with `git stash`.**
+  This bit during this very milestone: after the work was committed, `git stash push -- src`
+  had nothing to stash, printed "No local changes to save", exited **0**, and the script
+  happily screenshotted the *unchanged* tree as its "before". Every pair came back identical
+  because both sides were the same code. A stash-based before/after is only valid while the
+  work is uncommitted, and it fails silently the moment it isn't — so don't use it at all.
+  Assert the difference exists before trusting the comparison: check that a file the change
+  adds (`src/lib/lighting.ts`) is *absent* from the tree that produced the "before" shot.
