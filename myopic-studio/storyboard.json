@@ -23,6 +23,14 @@
       "cameraLabel": "MLS · 35mm",
       "frameId": "a1c1a7d9-8f87-4344-a5d4-5012186ce271",
       "shotNumber": 30
+    },
+    {
+      "sceneFilename": "cf4b5e61-5fed-4ab2-b1d9-721eaf535f84.myo",
+      "sceneTitle": "Server Room — Late Night",
+      "notes": "",
+      "cameraLabel": "MCU · 50mm",
+      "frameId": "07e8a2c0-dda6-4bd2-bec9-a4d478cc5a7e",
+      "shotNumber": 40
     }
   ]
 }
