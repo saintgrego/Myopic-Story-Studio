@@ -1764,3 +1764,53 @@ screenshotted together in one shot, palette-grey and grounded. Gates green (111/
 - **A test that iterates a manifest scales for free.** Adding four assets added four grounding
   assertions with no test edit. Worth preferring over enumerating cases when the manifest
   already exists.
+
+---
+
+## 10 August 2026 — day summary
+
+The whole of `docs/plan-2026-08-10.md` shipped, plus one thing the plan did not contain. Six
+PRs merged; `main` at `6482140`. Detail lives in the six sections above — this is the index
+and the scorecard, not a retelling.
+
+| # | what | plan est. | section |
+| --- | --- | --- | --- |
+| [#13](https://github.com/saintgrego/myopic-studio/pull/13) | Derived grounding + the regression test that guards it | 1 h 45 | *Pose grounding derived* / *regression test* |
+| [#14](https://github.com/saintgrego/myopic-studio/pull/14) | Blender spike, source-agnostic | 1.5–2 h | *Blender spike* |
+| [#15](https://github.com/saintgrego/myopic-studio/pull/15) | The plan itself, committed | — | — |
+| [#16](https://github.com/saintgrego/myopic-studio/pull/16) | PRD §11 v1.7 amendment | — | — |
+| [#17](https://github.com/saintgrego/myopic-studio/pull/17) | The pipeline; library becomes authored figures | 2–3 h | *Blender pose pipeline* |
+| [#19](https://github.com/saintgrego/myopic-studio/pull/19) | PRD §11 v1.8 + second figure | **not in the plan** | *Second figure* |
+| [#20](https://github.com/saintgrego/myopic-studio/pull/20) | Corrected the stacked-PR note | — | *Stacked PR* bullet, 4 Aug section |
+
+**Where the pose library ended up:** eight authored `.glb`s from the CC0 Blender Studio base
+meshes, 500 KB each, 4.0 MB total, all at `min.y = 0` and facing +Z, rebuildable with
+`npm run build:poses`. PRD §9 item 1 is closed. Item 2 (Daz round-trip) is the only
+deliberately-open item left.
+
+### The plan's predictions, scored
+
+Recorded because the pattern is more useful than any single item: **every estimate the plan
+made about difficulty was wrong in both directions, and the measurements were what settled
+each one.**
+
+- **§4.4's axis landmine — did not fire.** Budgeted an hour of confusion; cost five minutes,
+  and the default export was already correct. A named asymmetric marker answered it.
+- **§4.4's size estimate — 6× pessimistic.** 1–5 MB per pose predicted; 500 KB actual. That
+  is what made the storage decision (item 4) trivial rather than a Git LFS conversation.
+- **§2.2's coverage claim — wrong.** The grounding assertion was justified by two past
+  incidents and demonstrably catches one. Reverting both artefacts took two minutes.
+- **The real cost was somewhere the plan never looked: rigging.** §4.2 called the pipeline a
+  shape; the three bugs that actually consumed the afternoon were a Blender posing-API trap,
+  a source file parked 2.26 m off the origin, and a knee that cannot be measured. None were
+  foreseeable from the plan, and all three surfaced as *plausible wrong numbers* rather than
+  errors.
+
+### The one thing worth carrying forward
+
+**Fallbacks that return plausible values cost more than every other class of bug today.**
+`limb_x` returning `0.1`, landmark scans returning range midpoints, `arm_chain` returning a
+hardcoded T-pose, `GLTFLoader` treating a foreign-realm buffer as a parsed document — each
+produced output that looked like an answer. The grounding work at the start of the day and
+the rigging work at the end were the same lesson twice: *derive the value, and make the
+un-derivable case loud.*
