@@ -1,0 +1,176 @@
+{
+  "scene_id": "cf4b5e61-5fed-4ab2-b1d9-721eaf535f84",
+  "title": "Server Room — Late Night",
+  "created": "2026-08-09T16:27:36.265Z",
+  "prompt": "Interior. A cramped server room, late night. Banks of blinking servers. A lone technician hunches over a terminal, face lit by screen glow. Tight over-the-shoulder shot.",
+  "environment": {
+    "locationName": "Cramped server room",
+    "setting": "Interior",
+    "timeOfDay": "Night",
+    "weather": "[?]"
+  },
+  "lighting": {
+    "scheme": "Practical",
+    "keyLightAzimuth": 10,
+    "keyLightElevation": 15,
+    "keyLightColor": "#66CCFF",
+    "fillIntensity": 0.15,
+    "rimLight": true,
+    "rimIntensity": 0.3,
+    "shadowSoftness": 0.25,
+    "moodPreset": "Noir"
+  },
+  "camera": {
+    "shotType": "MCU",
+    "angle": "Eye Level",
+    "focalLength": 50,
+    "depthOfField": 2,
+    "focusSubjectId": "char_01",
+    "position": {
+      "x": 0.3,
+      "y": 1.55,
+      "z": 0.8
+    },
+    "movement": "Static",
+    "aspectRatio": "2.39:1"
+  },
+  "characters": [
+    {
+      "id": "char_01",
+      "figureName": "the technician",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": -0.5
+      },
+      "rotation": {
+        "x": 0,
+        "y": 180,
+        "z": 0
+      },
+      "scale": 1,
+      "visible": true,
+      "mesh": {
+        "kind": "gltf",
+        "path": "/assets/poses/crouching.glb"
+      }
+    }
+  ],
+  "props": [
+    {
+      "id": "prop_01",
+      "propName": "terminal desk",
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": -1.5
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "mesh": {
+        "kind": "gltf",
+        "path": "/assets/props/desk.glb"
+      }
+    },
+    {
+      "id": "prop_02",
+      "propName": "computer terminal monitor",
+      "position": {
+        "x": 0,
+        "y": 0.78,
+        "z": -1.55
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "box",
+        "dimensions": [
+          0.5,
+          0.35,
+          0.05
+        ]
+      }
+    },
+    {
+      "id": "prop_03",
+      "propName": "server rack bank",
+      "position": {
+        "x": -2,
+        "y": 0,
+        "z": -3
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "box",
+        "dimensions": [
+          0.6,
+          2,
+          0.8
+        ]
+      }
+    },
+    {
+      "id": "prop_04",
+      "propName": "server rack bank",
+      "position": {
+        "x": 2,
+        "y": 0,
+        "z": -3
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "mesh": {
+        "kind": "primitive",
+        "shape": "box",
+        "dimensions": [
+          0.6,
+          2,
+          0.8
+        ]
+      }
+    }
+  ],
+  "storyboard_notes": "Claustrophobic, dim server room lit mostly by blinking server LEDs and the cold glow of the terminal screen. The lone technician is hunched forward, face washed in pale blue light, isolated in the tight over-the-shoulder framing. Mood is tense, quiet, and technological — a sense of being watched or racing against time.",
+  "flagged_params": [
+    "environment.weather"
+  ]
+}
