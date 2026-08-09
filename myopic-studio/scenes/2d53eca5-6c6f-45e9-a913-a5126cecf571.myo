@@ -1,0 +1,133 @@
+{
+  "scene_id": "2d53eca5-6c6f-45e9-a913-a5126cecf571",
+  "title": "Apartment Window Talk — Evening",
+  "created": "2026-08-08T17:41:04.445Z",
+  "prompt": "Interior of a 12th floor apartment, early evening. Two figures are standing between two windows that look out onto the city, talking.",
+  "environment": {
+    "locationName": "12th floor apartment, interior",
+    "setting": "Interior",
+    "timeOfDay": "Dusk",
+    "weather": "[?]"
+  },
+  "lighting": {
+    "scheme": "Natural",
+    "keyLightAzimuth": 90,
+    "keyLightElevation": 15,
+    "keyLightColor": "#FFB870",
+    "fillIntensity": 0.4,
+    "rimLight": true,
+    "rimIntensity": 0.3,
+    "shadowSoftness": 0.6,
+    "moodPreset": "Golden Hour"
+  },
+  "camera": {
+    "shotType": "MS",
+    "angle": "Eye Level",
+    "focalLength": 35,
+    "depthOfField": 2.8,
+    "focusSubjectId": null,
+    "position": {
+      "x": 0,
+      "y": 1.6,
+      "z": 3
+    },
+    "movement": "Static",
+    "aspectRatio": "16:9"
+  },
+  "characters": [
+    {
+      "id": "char_01",
+      "figureName": "the first figure",
+      "position": {
+        "x": -0.7,
+        "y": 0,
+        "z": -1
+      },
+      "rotation": {
+        "x": 0,
+        "y": 90,
+        "z": 0
+      },
+      "scale": 1,
+      "visible": true,
+      "mesh": {
+        "kind": "gltf",
+        "path": "/assets/poses/standing.glb"
+      }
+    },
+    {
+      "id": "char_02",
+      "figureName": "the second figure",
+      "position": {
+        "x": 0.7,
+        "y": 0,
+        "z": -1
+      },
+      "rotation": {
+        "x": 0,
+        "y": -90,
+        "z": 0
+      },
+      "scale": 1,
+      "visible": true,
+      "mesh": {
+        "kind": "gltf",
+        "path": "/assets/poses/standing.glb"
+      }
+    }
+  ],
+  "props": [
+    {
+      "id": "prop_01",
+      "propName": "window",
+      "position": {
+        "x": -1.5,
+        "y": 0.9,
+        "z": -4.5
+      },
+      "rotation": {
+        "x": 0,
+        "y": 180,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "mesh": {
+        "kind": "gltf",
+        "path": "/assets/props/window.glb"
+      }
+    },
+    {
+      "id": "prop_02",
+      "propName": "window",
+      "position": {
+        "x": 1.5,
+        "y": 0.9,
+        "z": -4.5
+      },
+      "rotation": {
+        "x": 0,
+        "y": 180,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "mesh": {
+        "kind": "gltf",
+        "path": "/assets/props/window.glb"
+      }
+    }
+  ],
+  "storyboard_notes": "Two figures stand between two windows overlooking the city at dusk, engaged in conversation. Warm fading light from outside establishes an intimate, quiet mood.",
+  "flagged_params": [
+    "environment.weather"
+  ]
+}
