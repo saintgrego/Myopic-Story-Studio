@@ -35,7 +35,7 @@ These are **explicitly out of scope**. Do not build them. Do not scaffold them "
 4. **No multi-user, no cloud, no sync, no accounts.** Single-user, local, filesystem-only.
 5. **No PDF export.** Deferred.
 6. **No animation or camera movement playback.** The `movement` field is stored as metadata only; nothing moves.
-7. **No rigging, skeletons, IK, manual joint posing, morphs, or facial expressions — narrowed in v1.2, see section 11.** Characters may take a *posture* by selecting from a library of static baked-pose meshes (a sitting figure is a different `.glb` than a standing one). Nothing articulates at runtime: no bones, no pose editor, no per-joint control. Figures remain static proxy geometry.
+7. **No rigging, skeletons, IK, manual joint posing, morphs, or facial expressions — narrowed in v1.2, see section 11.** Characters may take a *posture* by selecting from a library of static baked-pose meshes (a sitting figure is a different `.glb` than a standing one). Nothing articulates at runtime: no bones, no pose editor, no per-joint control. Figures remain static — **and, narrowed in v1.7, may be authored figure meshes rather than proxy geometry; a rig may be used to produce them, but nothing rigged ships in the `.glb`.**
 
 **Rendering scope is deliberately absent from this list.** v1.0 carried a "no photorealistic rendering" non-goal here; it was removed in v1.1 and replaced by section 11, which is now the only place that governs how the viewport is allowed to look. Read it before building anything that changes the picture. Everything above is unchanged and still binding.
 
@@ -183,7 +183,7 @@ Not decisions to be made by the implementing model. Leave these alone.
 3. ACES filmic tone mapping — not a look choice; the sky shader emits HDR values and clips to a flat white dome without it.
 4. Distance fog, graded by `weather`, warming toward the key colour as the sun drops. Interiors fade into the background instead of ending at a hard ground edge.
 
-**What this did not change:** flat/basic materials are still correct, and every object is still proxy geometry. Nothing here touched the parser's output contract, the `.myo` envelope, or the mesh abstraction in section 4.
+**What this did not change:** flat/basic materials are still correct, and every object is still proxy geometry (**narrowed in v1.7: characters may carry authored figure meshes; everything else stays proxy geometry**). Nothing here touched the parser's output contract, the `.myo` envelope, or the mesh abstraction in section 4.
 
 **Assessed and dropped:** a parser prompt nudge mapping time-of-day to light values. `claude-sonnet-5` already returns sunset-appropriate elevation and key colour unprompted, so the prompt text would have been redundant. Revisit only if a live parse produces bad lighting.
 
@@ -195,7 +195,7 @@ This replaces the removed non-goal. It is the whole of the standing policy on ho
 
 **In, and built:** cast shadows, ground plane, sky dome and horizon, filmic tone mapping, distance fog.
 
-**Out, and not to be built without another amendment logged here:** ray tracing, authored PBR materials, texture maps, reflections, bloom, ambient occlusion, and depth-of-field as a rendered effect (the f-stop drives the focus readout added in v1.3; it must not drive shading). Flat/basic materials remain correct, and every object remains proxy geometry.
+**Out, and not to be built without another amendment logged here:** ray tracing, authored PBR materials, texture maps, reflections, bloom, ambient occlusion, and depth-of-field as a rendered effect (the f-stop drives the focus readout added in v1.3; it must not drive shading). Flat/basic materials remain correct, and every object remains proxy geometry (**narrowed in v1.7 for characters only — an authored figure mesh is an asset change, not a rendering feature; this out-list is unaffected by it**).
 
 **The standing risk this rule exists to manage:** each of these individually looks like a small step from what already ships, and "it would help the director see it" can be argued for any of them. That argument is not sufficient — apply the test, and if it passes, amend this section before building.
 
@@ -326,3 +326,44 @@ This replaces the removed non-goal. It is the whole of the standing policy on ho
 **Schema change (section 5):** `Lighting` gains `fillColor` (hex, default `#ffffff`) and `rimColor` (hex, default `#ffffff`). Both are cosmetically neutral by default so every existing `.myo` renders identically until edited — no migration needed, same pattern as `environment.setting`'s backward-compat fallback.
 
 **Not in scope:** anything gels do in real cinematography beyond colour — barn doors, diffusion, cut. Tint only.
+
+### v1.7 — 10 August 2026: authored figure assets for the pose library
+
+**Requested by the owner on 7 August 2026**, with a reference render of a sculpted anatomical base mesh: proxy capsules and the primitive mannequin do not carry enough body language to read blocking, and the owner requires figure geometry of at least that standard. `docs/proposal-realistic-figure-assets.md` is the analysis this amendment adopts; it was drafted as "v1.4" before v1.4–v1.6 existed, and this supersedes that numbering.
+
+**Applying the section 11 test.** The governing rule is about *rendering features* — it exists to stop "it would help the director see it" from justifying each next step toward photorealism. This changes an **asset** and touches no shading whatsoever: same lights, same materials, same tone mapping. It passes the blocking test on its own terms — a capsule cannot tell a director which way a figure's shoulders are turned, where the eyeline goes, or whether a shot reads as a two-shot or a stand-off, and body language answers all three. But it does contradict the plain sentence "every object is still proxy geometry" in three places in this document, which is exactly the kind of change section 11 exists to make deliberate.
+
+**Proven before being scoped**, per v1.2's precedent. A source-agnostic spike ran on 10 August, before this text was written: headless Blender (`--background --factory-startup --python`) exporting generated geometry to `.glb`, loaded in the viewport with grounding and axes measured, not assumed. It established that the default glTF export lands a Blender figure facing **+Z** — the app's convention, no flags — that grounding is enforceable in the exporter, and that a new figure is re-materialled from the palette purely because its path is in `poses.json`, with no code change. Evidence in `STATE.md` under "Blender spike".
+
+**The core decision is unchanged from v1.2: a pose is still a mesh, not a field.** This amendment changes the *content* of the pose library, not its contract. `poses.json` keeps its shape and its four rows; `buildObject()`, the parser, the `.myo` envelope and the scene model are untouched by construction, per section 4.
+
+**What changed in this document**
+
+- **Section 9 item 1 (asset pipeline) closes** in favour of the **Blender Studio Human Base Meshes**, chosen by the owner on 10 August 2026. **CC0** — public domain, no attribution required and no redistribution clause, so a derived `.glb` may be committed to this repo without a licence question. Daz Genesis was the closest match to the reference render but its EULA governs redistribution; MakeHuman/MPFB2 is equally CC0 but would need MPFB2 installed into Blender first. All other section 9 items stand, including item 2 (no Daz round-trip).
+- **"Every object is proxy geometry" is narrowed in three places** — section 2 non-goal #7, v1.1's "what this did not change", and the governing rule's closing sentence. Characters carry authored figure meshes; props, environment, and every other object remain proxy geometry. Each is marked in place.
+- **No schema change, no parser change, no `.myo` change.**
+
+**Authorized to build under this amendment**
+
+1. A reproducible asset pipeline in `scripts/blender/`, driving the Blender binary headlessly (**not** `pip install bpy`): import the Blender Studio base mesh, apply each pose in the library, export `.glb` into `public/assets/poses/`.
+2. **Rigging the base mesh inside the pipeline.** The Blender Studio meshes ship **unrigged**, so posing them needs a rig — Rigify, which is bundled with Blender and already present. This is a pipeline step, not a product feature: the rig exists in the `.blend`/pipeline only, and non-goal #7 stands unchanged because nothing rigged reaches a `.glb`, the app, or the user. If rigging proves to be the expensive part, MakeHuman/MPFB2 (also CC0, ships rigged) is the fallback, and swapping to it is a change to this pipeline alone.
+3. Replacement of all **four** existing pose meshes — `standing`, `sitting`, `crouching`, `lying` — with figure-based ones. `poses.json` unchanged in shape and in its four paths.
+4. A recorded decision on asset storage (in-repo, Git LFS, or fetched into a gitignored `assets-src/`), made after real file sizes are known rather than estimated. CC0 removes the *licence* constraint on committing the source mesh; the size constraint is unmeasured and still decides this.
+5. Retention of `scripts/generate-pose-glbs.mjs` as a fallback placeholder generator, or its removal — a call to make when the assets land.
+
+**Conventions the pipeline output must meet.** These are not new rules; they are the existing ones, written down because an authored asset is the first thing that can violate them silently:
+
+- **Base-anchored**: `Box3.min.y === 0` (within 1 mm). Enforced in the exporter, and asserted for the committed library by `poses.test.ts`.
+- **Faces +Z**, life-sized in metres, so `scale` stays 1.
+- **No texture maps.** Library glTFs are re-materialled from `src/palette.ts` at load; any authored skin or material that arrives with the asset is discarded, which is what the out-list requires anyway.
+
+**Still out, and unaffected:** rigging, IK, pose editors, morphs, facial expression and animation — non-goals #6 and #7 stand, and the assets remain static per-pose exports. A rig may be used *in Blender* to produce them; nothing rigged ships in the `.glb`. Every rendering-scope item on section 11's out-list stays out. This amendment changes geometry, never shading.
+
+**Acceptance (owner-verifiable, per section 8's convention):**
+
+- [ ] A scene renders all four poses as figure meshes with no code change outside the pipeline script.
+- [ ] Adding a fifth pose is a documented, repeatable procedure.
+- [ ] Every exported pose measures `min.y = 0` and faces +Z, verified with `scripts/measure-glb.mjs`.
+- [ ] `npx tsc --noEmit`, `npm run test:ci` and `CI=true npm run build` stay green.
+
+**Deliberately not decided here:** whether *props* ever gain authored geometry. This amendment covers characters only; `src/props.json` and its proxies are untouched and stay in scope for the generator.

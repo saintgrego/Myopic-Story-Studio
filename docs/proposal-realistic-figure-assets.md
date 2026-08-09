@@ -1,11 +1,13 @@
 # Proposal — realistic figure assets for the pose library
 
-**Status: PROPOSED, NOT ADOPTED.** Nothing in this document has been built, and no file in
-the app has been changed on account of it. PRD §9 item 1 reserves the asset-pipeline
-decision to the owner ("Not decisions to be made by the implementing model. Leave these
-alone."), so this is drafted for the owner to accept, reject, or rewrite — it is
-deliberately *not* pasted into `PRD.md`. If it is accepted, §11 gains the amendment text
-below and §9 item 1 closes.
+**Status: ADOPTED 10 August 2026 as PRD §11 v1.7.** The owner chose the **Blender Studio
+Human Base Meshes** (CC0). PRD §9 item 1 is closed. Read `PRD.md` §11 v1.7 for the
+authoritative text — it supersedes this document wherever the two differ, and they differ in
+several places: the draft amendment below is numbered v1.4 (stale), covers three poses rather
+than four, and its "feasibility in the current dev container" section describes the *agent's*
+container, not the owner's Mac, where Blender 5.2 LTS is installed and the pipeline was
+spiked successfully on 10 August. This file is kept as the analysis and the argument, not as
+a specification.
 
 Raised 7 August 2026 by the owner, with a reference image: a three-view render of a
 sculpted anatomical human base mesh (Daz Genesis / MakeHuman class — real shoulder,
