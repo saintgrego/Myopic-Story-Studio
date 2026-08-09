@@ -1088,3 +1088,41 @@ generator plus the three `.glb` outputs, no schema, viewport or parser change.
 
 **What this is not.** It is a wooden artist's mannequin, and it is nowhere near the owner's
 reference render. That gap is an asset-class gap, not a tuning gap — see the proposal doc.
+
+## Live parse gate re-run after the merge (2026-08-08): PASS
+
+The gate above was run against `server/parser.js` as it stood *before* the merge with
+`origin/main`. That merge changed the same file — it added #5's focus-subject rule and dropped
+the superseded "prop meshes are ALWAYS primitive" bullet — so proxy selection was re-verified
+against the merged parser rather than assumed to have survived. Backend restarted first
+(started 15:13:42 against a `parser.js` last modified 15:03:52).
+
+Prompt: open-plan living room, early evening — sofa, bookshelf, armchair, floor lamp, dining
+table with four chairs, kitchen counter, window, door, plus a television on a low cabinet, and
+two characters (Maya sitting, her brother standing).
+
+**14 props — 12 library proxies, 2 primitive fallbacks. Unchanged from the pre-merge run.**
+
+- Proxied: `sofa`, `bookshelf`, `armchair`, `floor-lamp`, `dining-table`, `dining-chair` ×4,
+  `counter`, `window`, `door`. 9 distinct prop paths + 2 pose paths, **all 11 checked against
+  `props.json`/`poses.json` and against the files on disk — no invented paths**. 9 of 12 prop
+  library entries exercised.
+- Fallback: `low cabinet` and `television`, neither of which has a proxy. Honest fallback, and
+  no `propNote` anywhere in the payload (correct — there is no such flag by design).
+
+**Conventions held:**
+
+- `window` at `position.y = 0.9` — the sill-height exception from its `props.json` hint applied
+  again, not floored at 0. Still the subtle one, still correct.
+- `television` at `y = 0.5` on a `low cabinet` whose box is exactly 0.5 m tall, both at
+  x = -4.5, z = 1. Stacking is exact; every floor-standing prop is at `y = 0`.
+- Every prop `scale` is `{1,1,1}` — the Milestone 3 dimensions-into-scale pattern did not recur.
+- Characters got `sitting.glb` / `standing.glb` at `scale: 1`, matching the described postures.
+
+**Also confirms the merge did not regress #5:** `camera.focusSubjectId` came back as `char_01`
+(Maya, who the prompt says the shot is focused on) — a real id belonging to an emitted
+character, not `[?]` and not a dangling reference.
+
+`flaggedParams` was `["environment.weather", "lighting.rimIntensity", "camera.movement",
+"camera.aspectRatio"]` — four genuinely unstated values, no false positives.
+
