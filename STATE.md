@@ -517,6 +517,61 @@ rendering code.
 - Gotcha: after hand-editing a `.myo`, re-selecting the same scene in the dropdown does
   nothing (same value, no `change` event) — clear the select and re-set it, or reload the page.
 
+### Fourth pose — lying (2026-07-31): DONE, gates verified
+
+- Closes a gap the earlier live parses exposed twice: "man lies flat on his back" and the
+  sprawled third figure both fell to nearest-pose + `poseNote` flag because no lying pose
+  existed. The library is now standing / sitting / crouching / **lying**.
+- Followed the documented recipe exactly — generator row + re-run + `poses.json` row; zero
+  viewport code touched (v1.2 acceptance #3 exercised again, for real this time).
+- Generator change: joint bends couldn't express a horizontal figure, so `buildFigure` gained
+  two whole-figure params, `rootRotX` (rotation at the root) and `rootLift` (raise the rotated
+  figure so its lowest surface rests at y = 0, preserving base-anchored positions). Lying is
+  the standing figure rotated −π/2 at the root and lifted 0.15 — the torso radius, the deepest
+  point behind the back. Face up, feet at the origin, head toward −Z.
+- **Evidence** — loaded the exported `.glb`s back through `GLTFLoader` under Node and measured
+  `Box3` bounds: standing spans y 0→1.60; lying spans y 0→0.31 and z −1.60→0, min y exactly
+  0.00. Horizontal, resting on the floor, base-anchored. All four files regenerated (~87 KB
+  each); `npx tsc --noEmit` clean; `npm run build` passing.
+- Parser + pose dropdown pick the new pose up automatically (both read `poses.json`) — but
+  per the standing gotcha above, the prompt-side mapping only exists in a backend started
+  after this change. No live parse was run this session (no backend up); the previously
+  flagged "lies flat on his back" prompt is the obvious re-verification case.
+- **Follow-up (same day): backend restarted, prompt verified, one stale-prompt bug found and
+  fixed.** Captured the SYSTEM_PROMPT the restarted backend actually builds (stubbed
+  `global.fetch` around the real `parsePromptToScene`, dummy key never sent): the pose list
+  correctly offered `lying.glb` — but the unmatched-posture rule's hardcoded example still
+  read "(lying down, climbing, a handstand)", telling the model lying has NO matching pose in
+  direct contradiction of the list above it. Adding a pose whose posture appears in that
+  example list requires editing the example too — `poses.json` alone doesn't reach it.
+  Changed to "(climbing, a handstand, mid-leap)" and restarted; re-capture confirms the
+  contradiction is gone.
+- **Live-parse verification: PASS (same day, user supplied the key mid-session).**
+  Backend restarted with the key loaded, then two live parses through `POST /api/parse`:
+  - "A man lies flat on his back in an empty warehouse" → `characters[0].mesh` =
+    `{"kind":"gltf","path":"/assets/poses/lying.glb"}`, no `poseNote` anywhere, no
+    `characters[i].poseNote` in `flaggedParams` (the flags present were the usual
+    unstated-lighting/camera sentinels from a minimal prompt). This exact prompt shape
+    previously fell to nearest-pose + flag — the gap is closed.
+  - Regression check that editing the unmatched-posture example didn't break the flag path:
+    "A gymnast does a handstand in the middle of a gym" → nearest pose (`standing.glb`),
+    `characters[0].poseNote` present in `flaggedParams`, and the field itself correctly
+    stripped from the scene. The flag mechanism survives.
+- **Rebased onto `main` 2026-08-09; `lying.glb` regenerated, and the floor-contact figures
+  above are superseded.** The committed binary was 87 KB against ~156 KB for the other three
+  — it predated the pose mannequin rebuild (#6), so lying would have rendered as the old
+  crude figure beside three detailed ones. `poses.test.ts` did not catch it: it checks that
+  `poses.json` and the `.glb` files correspond by name, not that the binaries are current.
+  Re-running the generator produced 156 KB and left the other three byte-identical (so the
+  generator is deterministic and `main`'s assets are current).
+- **Base-anchoring no longer holds anywhere in the library, not just here.** Measured `Box3`
+  y-bounds after regeneration: standing −0.040→1.679, sitting 0.030→1.369, crouching
+  0.054→1.330, lying 0.027→0.308 (z −1.679→0.040). Lying floats 2.7 cm because `rootLift:
+  0.15` was tuned to the *old* torso radius — but standing sinks 4 cm and crouching floats
+  5.4 cm on `main` already. The rebuild broke the base-anchored convention across all four
+  poses; retuning one in isolation would make it the odd one out. Left for a library-wide
+  pass. Lying's shape is unaffected: horizontal, ~0.31 m deep, 1.68 m along −Z, face up.
+
 ## Test suite added (2026-08-01): DONE, 24 tests passing
 
 - Replaced the "no test suite" state with unit tests on CRA's bundled Jest 27 (no new test

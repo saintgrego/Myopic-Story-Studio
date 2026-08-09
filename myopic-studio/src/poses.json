@@ -13,5 +13,10 @@
     "name": "crouching",
     "path": "/assets/poses/crouching.glb",
     "hint": "crouched, hunched over, bent forward, kneeling at something"
+  },
+  {
+    "name": "lying",
+    "path": "/assets/poses/lying.glb",
+    "hint": "lying down flat on their back — asleep, collapsed, on a bed or the ground"
   }
 ]

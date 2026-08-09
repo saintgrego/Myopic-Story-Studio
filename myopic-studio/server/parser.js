@@ -96,7 +96,7 @@ ${PROP_LIST}
 ${POSE_LIST}
   ("hunches over a terminal" → crouching; "seated by the window" → sitting; "stands at the door" → standing.)
 - When NO posture is stated or implied, the character mesh defaults to the neutral capsule: {"kind":"primitive","shape":"capsule","dimensions":[0.4,1.8]} (radius, height in metres). Absence of posture is normal — do NOT flag it, do NOT guess standing.
-- When a posture IS described but none of the pose meshes fits (lying down, climbing, a handstand), pick the closest pose mesh AND add "poseNote": "[?]" to that character so the mismatch is flagged for review. Never add "poseNote" in any other case.
+- When a posture IS described but none of the pose meshes fits (climbing, a handstand, mid-leap), pick the closest pose mesh AND add "poseNote": "[?]" to that character so the mismatch is flagged for review. Never add "poseNote" in any other case.
 - Focus subject: whenever the scene has ANY characters, set "focusSubjectId" to the id of the one the shot is actually about — the character named first, or the one the described action centres on. It must be one of the character ids you emitted. Use null ONLY when there are no characters at all. This value aims the camera, so a wrong id points the shot at the wrong person. Never emit "[?]" here: it is a real id or it is null.
 - rotation defaults to {"x":0,"y":0,"z":0} unless a facing direction is explicit or strongly implied by the prompt.
 - Return an empty array if no characters or props are present.
