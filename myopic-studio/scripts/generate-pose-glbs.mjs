@@ -192,11 +192,10 @@ function buildFigure(pose) {
   const root = new THREE.Group();
   root.name = 'mannequin';
 
-  // Whole-figure orientation, for poses that aren't upright (lying). rootLift
-  // raises the rotated figure so its lowest surface rests at y = 0, keeping
-  // the base-anchored position convention.
+  // Whole-figure orientation, for poses that aren't upright (lying). The lift that
+  // puts the rotated figure back on the floor is derived at the end of this
+  // function, not carried in the pose table.
   root.rotation.x = pose.rootRotX ?? 0;
-  root.position.y = pose.rootLift ?? 0;
 
   const hips = new THREE.Group();
   hips.position.y = pose.hipY;
@@ -312,11 +311,21 @@ function buildFigure(pose) {
     shin.group.add(toe);
   }
 
+  // Ground the assembled figure. Positions are base-anchored (position.y is where the
+  // object touches the floor), so every pose .glb must bottom out at exactly y = 0.
+  // Measure the built figure and translate the root — do NOT hand-tune a lift per pose.
+  // The eyeballed values this replaces silently drifted 3–5cm when the body was rebuilt
+  // underneath them (feet and leg segments changed; the constants did not), which is the
+  // failure mode a derived offset makes impossible.
+  const bounds = new THREE.Box3().setFromObject(root);
+  root.position.y = -bounds.min.y;
+
   return root;
 }
 
-// hipY values keep feet at y≈0 given the leg segment lengths (thigh 0.38 + shin
-// 0.34 + foot). Verified visually in the viewport, not derived — adjust there.
+// hipY sets pelvis height, which is what decides how bent the legs read. It is no longer
+// load-bearing for floor contact — buildFigure() grounds the assembled figure — so adjust
+// it for the look of the pose and let the grounding pass follow.
 const POSES = {
   // Neutral A-pose stand-in for "on their feet".
   standing: { hipY: 0.77 },
@@ -325,9 +334,8 @@ const POSES = {
   // Deep knee bend + waist hunch — "hunches over a terminal".
   crouching: { hipY: 0.5, thighForward: -1.6, kneeBend: 2.0, torsoBend: 0.55, armForward: -1.0, elbowBend: -0.5 },
   // Flat on the back, face up, feet at the origin, head toward -Z: the standing
-  // figure rotated at the root, lifted by the torso radius (0.15, the deepest
-  // point behind the back) so the back rests on the floor.
-  lying: { hipY: 0.77, rootRotX: -Math.PI / 2, rootLift: 0.15 },
+  // figure rotated at the root. The lift that rests its back on the floor is derived.
+  lying: { hipY: 0.77, rootRotX: -Math.PI / 2 },
 };
 
 mkdirSync(OUT_DIR, { recursive: true });

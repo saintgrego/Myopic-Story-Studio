@@ -1455,3 +1455,49 @@ behaviour, exactly the prompt-adherence question the previous entry predicted.
 - **A fallback used in more than one place belongs in a constant, immediately.** The FOV
   maths and the readout independently hard-coded 50; nothing would have caught the drift
   because both were individually correct.
+
+## Pose grounding derived, not eyeballed (2026-08-10): DONE, all four poses at minY = 0
+
+Closes the library-wide pass the `lying` entry above left open. The pose `.glb` files had
+drifted off the base-anchored convention when the mannequin body was rebuilt (#6) underneath
+`hipY` constants that had been eyeballed against the *old* capsule figure.
+
+Measured from the committed binaries with `GLTFLoader.parse` + `Box3` under plain Node
+(no jsdom, no WebGL), before and after:
+
+| pose | minY before | minY after | height (unchanged) |
+| --- | --- | --- | --- |
+| standing | −0.0398 (4.0 cm **into** the floor) | 0.0000 | 1.7188 |
+| sitting | +0.0302 | 0.0000 | 1.3388 |
+| crouching | +0.0539 | 0.0000 | 1.2759 |
+| lying | +0.0268 | 0.0000 | 0.2807 |
+
+All 12 prop proxies measured 0.0000 before and were not touched — the convention was intact
+everywhere except poses, which is what isolated the cause to the `POSES` table.
+
+**The fix is a measurement, not four new constants.** `buildFigure()` now ends with
+`root.position.y = -new THREE.Box3().setFromObject(root).min.y`. `rootLift` is subsumed by
+this and is gone from the pose table; `hipY` stays but is no longer load-bearing for floor
+contact — it sets pelvis height, i.e. how bent the legs read, and the grounding pass follows
+whatever it produces. Heights are identical before/after, confirming the change is a pure
+root translation and no geometry moved relative to anything else.
+
+Gates green: `npx tsc --noEmit`, `npm run test:ci` (110/110, 9 suites), `CI=true npm run
+build`. Verified in-browser on "Two Detectives — Office at Night" (standing + sitting
+glTF poses): both figures on the floor, sitting figure still meeting the chair.
+
+### Rules worth remembering
+
+- **A constant tuned by eye against geometry it does not own will drift silently the next
+  time that geometry changes.** `hipY` and `rootLift` were both correct when written and both
+  wrong within two days of the body rebuild, with nothing failing in between. Where the
+  correct value is *computable from what was built*, compute it — the derived form cannot go
+  stale, and it removes the "verified visually in the viewport, not derived" caveat the old
+  `POSES` comment carried as a standing invitation to re-eyeball.
+- **Measure the whole library before fixing one member of it.** Re-tuning `lying` alone (the
+  pose that prompted this) would have made it the only grounded figure of four. The one-line
+  Node measurement across poses *and* props is what turned "lying floats" into "the pose
+  generator lost the convention, props never did".
+- **This invalidates pose screenshot baselines, by design.** Rendered figures shift by up to
+  5.4 cm. Any byte-comparison baseline from the gel-filter milestone that contains a pose
+  proxy is expected to differ; that shift *is* the correction.
