@@ -26,7 +26,8 @@ npm start          # frontend alone (CRA, hot reloads)
 npx tsc --noEmit   # the typecheck gate — verified clean; keep it that way
 npm run test:ci    # unit tests, single run (CRA Jest) — verified passing
 npm run build      # production build (includes CRA's ESLint) — verified passing
-node scripts/generate-pose-glbs.mjs   # regenerate the pose .glb library
+npm run build:poses                   # rebuild the pose .glb library from the authored base mesh (needs Blender + assets-src/)
+node scripts/generate-pose-glbs.mjs   # FALLBACK: regenerate the pose library as primitive mannequins (overwrites the above)
 node scripts/generate-prop-glbs.mjs   # regenerate the prop proxy .glb library
 ```
 
@@ -57,7 +58,7 @@ Data flow:
 
 Every character/prop holds a `mesh` reference: `{kind:'primitive', shape, dimensions}` **or** `{kind:'gltf', path}`. `buildObject()` in Viewport.tsx is the only code allowed to switch on `mesh.kind`. Both variants are first-class; adding real assets must stay a data change, not a code change.
 
-**A pose is a mesh, not a field** (PRD §11 v1.2): `/assets/poses/sitting.glb` *is* the sitting pose. There is no `pose` field anywhere. `src/poses.json` is the single source of truth for the pose library — `PropertiesPanel` imports it, `server/parser.js` `require`s it. Adding a pose = add a row to the generator's `POSES` table, re-run the generator, add a row to `poses.json`. No viewport code exists to touch. The parser's unmatched-posture flag (`characters[i].poseNote` in `flaggedParams`) is computed then **stripped** before the scene is built — `poseNote` never reaches the scene model or disk.
+**A pose is a mesh, not a field** (PRD §11 v1.2): `/assets/poses/sitting.glb` *is* the sitting pose. There is no `pose` field anywhere. `src/poses.json` is the single source of truth for the pose library — `PropertiesPanel` imports it, `server/parser.js` `require`s it. Adding a pose = add a row to a generator's `POSES` table, re-run it, add a row to `poses.json`. No viewport code exists to touch. **The library is now authored figure geometry** (PRD §11 v1.7): `scripts/blender/build-pose-glbs.py` poses a CC0 Blender Studio base mesh in headless Blender and is the real generator; `scripts/generate-pose-glbs.mjs` survives as the no-Blender fallback and *overwrites the good figures with primitives* if you run it by reflex. Both tables must stay in step. The parser's unmatched-posture flag (`characters[i].poseNote` in `flaggedParams`) is computed then **stripped** before the scene is built — `poseNote` never reaches the scene model or disk.
 
 **A prop type is also a mesh** (PRD §11 v1.4): same pattern, same reasons — `/assets/props/sofa.glb` *is* the sofa, `src/props.json` is the single source of truth, `scripts/generate-prop-glbs.mjs` generates the library. There is no `propType` field. Two differences from poses: proxy geometry must sit on the floor itself (the renderer lifts primitives by half their extent, but never lifts a glTF group — `window` is the deliberate exception, its origin is the frame bottom so `position.y` is sill height), and there is **no `propNote` flag** — an unmatched prop falls back to a primitive, which is honest rather than ambiguous. Proxies face +Z and are life-sized, so `scale` stays 1.
 

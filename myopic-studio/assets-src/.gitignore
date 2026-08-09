@@ -1,0 +1,15 @@
+# Pipeline INPUT assets, not app assets. The app's own .glb library lives in
+# public/assets/ and IS committed; this directory holds the upstream source mesh the
+# Blender pipeline consumes, plus whatever an unzipped bundle drags along with it.
+#
+# Ignore EVERYTHING except this file and the README. Listing extensions instead
+# (*.blend, *.zip) let the bundle's unzipped thumbnails and catalogue file walk into a
+# commit — an asset bundle is a directory of surprises, so the default has to be "out".
+#
+# Ignored on SIZE grounds only, not licence grounds: the Blender Studio base meshes are
+# CC0, so committing a derived file here would be perfectly legitimate. PRD §11 v1.7
+# item 4 asked for this decision once real sizes were known — the source bundle is 48 MB
+# and stays out; the four exported .glb files are 2.0 MB total and are committed.
+*
+!.gitignore
+!README.md
