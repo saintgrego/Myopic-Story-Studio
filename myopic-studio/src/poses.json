@@ -2,21 +2,41 @@
   {
     "name": "standing",
     "path": "/assets/poses/standing.glb",
-    "hint": "upright on their feet"
+    "hint": "upright on their feet — use this when the description does not indicate a woman"
   },
   {
     "name": "sitting",
     "path": "/assets/poses/sitting.glb",
-    "hint": "seated — on a chair, bench, ledge, or the ground"
+    "hint": "seated — on a chair, bench, ledge, or the ground — use this when the description does not indicate a woman"
   },
   {
     "name": "crouching",
     "path": "/assets/poses/crouching.glb",
-    "hint": "crouched, hunched over, bent forward, kneeling at something"
+    "hint": "crouched, hunched over, bent forward, kneeling at something — use this when the description does not indicate a woman"
   },
   {
     "name": "lying",
     "path": "/assets/poses/lying.glb",
-    "hint": "lying down flat on their back — asleep, collapsed, on a bed or the ground"
+    "hint": "lying down flat on their back — asleep, collapsed, on a bed or the ground — use this when the description does not indicate a woman"
+  },
+  {
+    "name": "standing-female",
+    "path": "/assets/poses/standing-female.glb",
+    "hint": "upright on their feet, female figure — use when the description indicates a woman"
+  },
+  {
+    "name": "sitting-female",
+    "path": "/assets/poses/sitting-female.glb",
+    "hint": "seated — on a chair, bench, ledge, or the ground — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "crouching-female",
+    "path": "/assets/poses/crouching-female.glb",
+    "hint": "crouched, hunched over, bent forward, kneeling at something — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "lying-female",
+    "path": "/assets/poses/lying-female.glb",
+    "hint": "lying down flat on their back — asleep, collapsed, on a bed or the ground — female figure, use when the description indicates a woman"
   }
 ]

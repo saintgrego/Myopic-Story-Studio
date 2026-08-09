@@ -1,4 +1,4 @@
-# Builds the pose library from an authored base mesh (PRD §11 v1.7).
+# Builds the pose library from authored base meshes (PRD §11 v1.7, two figures in v1.8).
 #
 # Source: Blender Studio Human Base Meshes v1.4.1, CC0. See assets-src/README.md.
 #
@@ -37,7 +37,17 @@ from math import pi
 import bpy
 from mathutils import Matrix, Vector
 
-BODY = 'GEO-body_male_realistic'
+# The figures the library is built from (PRD §11 v1.8). Suffix → object in the bundle.
+#
+# The empty suffix keeps the original four paths — `/assets/poses/standing.glb` and its
+# siblings — because saved .myo files on disk reference them. It is the DEFAULT figure,
+# used when a description does not indicate otherwise, which is a rule the parser can
+# actually apply; "male" would not be. Renaming to a symmetric -male/-female pair would
+# read better and would break every saved scene, so it is deliberately not done.
+FIGURES = {
+    '': 'GEO-body_male_realistic',
+    '-female': 'GEO-body_female_realistic',
+}
 
 # Reused verbatim from the placeholder generator's POSES table, whose angles were
 # validated in the viewport over several milestones. The joint set below is the same one
@@ -319,6 +329,22 @@ def bake_and_export(obj, rig, pose, path):
 
     bpy.ops.object.select_all(action='DESELECT')
     baked.select_set(True)
+    bpy.context.view_layer.objects.active = baked
+
+    # Normalise shading before export, for two reasons that happen to have one fix.
+    #
+    # Appearance: the two source figures do not ship with the same shading, and two
+    # figures in one shot that catch the light differently read as two different kinds of
+    # object rather than two people — which defeats the point of having a second figure.
+    #
+    # Size: glTF cannot share a vertex between faces that disagree about its normal, so
+    # split normals multiply the vertex count. The female mesh exported 42,340 vertices
+    # for the same 21,160 triangles the male covered with 12,010 — a 2.9× file for
+    # identical topology. Clearing custom split normals and shading smooth brings them
+    # into line.
+    bpy.ops.mesh.customdata_custom_splitnormals_clear()
+    bpy.ops.object.shade_smooth()
+
     bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', use_selection=True,
                               export_skins=False, export_materials='NONE')
     bpy.data.objects.remove(baked, do_unlink=True)
@@ -336,15 +362,18 @@ def require(blend):
             'Nothing is fetched automatically, on purpose.\n')
 
 
-def load_figure(blend):
-    """Link the base mesh into an empty scene, origin-centred and transform-free.
+def load_figure(blend, body):
+    """Link one base mesh into an empty scene, origin-centred and transform-free.
 
     Everything downstream measures world coordinates, so this has to be the only place
-    that knows where the source file happened to park the object.
+    that knows where the source file happened to park the object. Called once per figure:
+    each gets its own empty scene, its own measurements and its own rig, because the two
+    bodies have different proportions and sharing a skeleton between them would put the
+    female figure's knees wherever the male figure's happened to be.
     """
     bpy.ops.wm.read_factory_settings(use_empty=True)
     with bpy.data.libraries.load(blend) as (src, dst):
-        dst.objects = [BODY]
+        dst.objects = [body]
     obj = dst.objects[0]
     bpy.context.collection.objects.link(obj)
     bpy.context.view_layer.objects.active = obj
@@ -371,19 +400,20 @@ def load_figure(blend):
 def main():
     blend, out = args()
     require(blend)
-    obj = load_figure(blend)
 
-    m = measure(obj)
-    print('LANDMARKS ' + '  '.join(f'{k}={v:.3f}' for k, v in m.items()))
+    for suffix, body in FIGURES.items():
+        obj = load_figure(blend, body)
+        m = measure(obj)
+        print(f'LANDMARKS[{body}] ' + '  '.join(f'{k}={v:.3f}' for k, v in m.items()))
 
-    rig = build_armature(obj, m)
-    bind(obj, rig)
+        rig = build_armature(obj, m)
+        bind(obj, rig)
 
-    for name, pose in POSES.items():
-        apply_pose(rig, pose)
-        bpy.context.view_layer.update()
-        bake_and_export(obj, rig, pose, f'{out}/{name}.glb')
-        print(f'wrote {out}/{name}.glb')
+        for name, pose in POSES.items():
+            apply_pose(rig, pose)
+            bpy.context.view_layer.update()
+            bake_and_export(obj, rig, pose, f'{out}/{name}{suffix}.glb')
+            print(f'wrote {out}/{name}{suffix}.glb')
 
 
 main()
