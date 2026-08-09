@@ -1629,3 +1629,67 @@ Gates re-run green (111/111).
 - **Rigging and posing are untouched.** The spike exports static geometry. Applying the four
   library poses to an authored figure (Rigify or an already-rigged source) is the part of
   §4.2 that is still all risk.
+
+## Blender pose pipeline (2026-08-10): BUILT — the library is authored figures now
+
+PRD §11 v1.7's authorized items 1–5, built and verified. `scripts/blender/build-pose-glbs.py`
+imports the CC0 Blender Studio base mesh, fits a measured skeleton, poses it, bakes the pose
+into static geometry, grounds it, and exports all four `.glb`s. `npm run build:poses` wraps it.
+The four figures in `public/assets/poses/` are now authored geometry: **500 KB each, 2.0 MB
+total**, up from ~156 KB each.
+
+**Nothing rigged ships.** The armature modifier is applied per pose and the rig is deleted
+before export (`export_skins=False`). Non-goal #7 is intact — the rig is a pipeline artefact.
+
+**Storage decision (v1.7 item 4), now that the numbers are real:** the four `.glb`s are
+committed (2.0 MB total — trivial); the 48 MB source bundle is gitignored in `assets-src/`
+with a README naming the source and licence. Neither LFS nor a fetch script is warranted.
+No network access at build time, deliberately: a missing bundle fails with directions.
+
+**Item 5:** `generate-pose-glbs.mjs` is kept as the no-Blender fallback and its header now
+says so in the first line — running it by reflex silently replaces the authored figures with
+primitive mannequins.
+
+Verified: all four `min.y = 0.0000` via `measure-glb.mjs`; standing 1.690 m; seated hip lands
+at 0.476 m (chair height); in-app screenshots of all four poses, palette-grey and grounded,
+switched live through the properties-panel pose selector. Gates green (111/111).
+
+### Three failures, and what each one actually was
+
+Worth reading before touching this script — none of the three presented as what it was.
+
+1. **The figure folded in half instead of sitting.** Presented as a broken pose; was a broken
+   *pivot*. `pose_bone.matrix_basis` is relative to the bone's rest position **and its
+   parent's pose**, so conjugating a world-space rotation with the bone's own rest matrix is
+   only correct for unparented bones. Every child bone pivoted about the armature origin
+   instead of its own joint, putting the seated figure's feet 1.4 m in front of its hips.
+   Fixed by posing through `pose_bone.matrix` (armature space) about the bone's own head,
+   strictly proximal → distal with a depsgraph update between each — rotating a parent moves
+   its children's heads, and `pb.matrix` reads that head.
+
+2. **Every vertex bound to one bone, and every "measurement" was a fallback.** The bundle
+   lays its 17 meshes out in a row, so this figure arrives at **x ≈ -2.26**, and
+   `transform_apply` bakes that offset into the vertices. Every `v.x > 0` test in the
+   landmark code matched nothing; the scans quietly returned their fallback values, the
+   bones were built around x = 0 in empty space, and bone-heat weighting — which needs bones
+   *inside* the mesh — collapsed all 10,582 vertices onto `forearm.R`. One line (centre in
+   plan before measuring) fixed the measurements, the bones, and the binding at once.
+   **The tell was in the numbers long before it was visible:** every `limb_x` came back as
+   exactly `0.1`, the fallback constant.
+
+3. **The knee is not measurable, and pretending otherwise found noise.** A straight leg has
+   no narrow point at the knee — the smoothed width profile rises monotonically from calf to
+   thigh. The first attempt scanned at the natural slice tolerance and "found" a minimum that
+   was a sparse quad ring, not a thin part of the body, putting the knee 6 cm high and the
+   seated figure on a bar stool. The ankle *is* a real minimum and stays measured, over a
+   band thicker than the mesh's vertex spacing. The knee is now an explicit ratio between two
+   measured landmarks, labelled as the one cheat at the point it happens.
+
+### Rules worth remembering
+
+- **A fallback that returns a plausible number is worse than a crash.** All three bugs above
+  survived because something returned 0.1, or a range midpoint, instead of failing. If a
+  landmark cannot be measured, that should be loud.
+- **Check where the source file parks its geometry before measuring anything.** An asset
+  library laid out in a row is normal; code that assumes origin-centred is the anomaly.
+- **`matrix_basis` for posing is a trap on any parented bone.** Use `pose_bone.matrix`.

@@ -1,3 +1,9 @@
+// FALLBACK PLACEHOLDER GENERATOR (PRD §11 v1.7 authorized item 5). The pose library is
+// now built from an authored CC0 base mesh by scripts/blender/build-pose-glbs.py
+// (`npm run build:poses`); running THIS script overwrites those figures with primitive
+// mannequins. Kept, not deleted, because it needs no Blender and no 48 MB download — it
+// is the way to get a usable pose library on a machine that has neither.
+//
 // Generates static posed proxy mannequins as .glb files in public/assets/poses/.
 // Poses are baked into the geometry — no rigging, no skeleton. Placing a posed
 // figure in a scene is therefore a pure data change (point a character's mesh at
