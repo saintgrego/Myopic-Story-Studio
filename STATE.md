@@ -557,6 +557,20 @@ rendering code.
     "A gymnast does a handstand in the middle of a gym" → nearest pose (`standing.glb`),
     `characters[0].poseNote` present in `flaggedParams`, and the field itself correctly
     stripped from the scene. The flag mechanism survives.
+- **Rebased onto `main` 2026-08-09; `lying.glb` regenerated, and the floor-contact figures
+  above are superseded.** The committed binary was 87 KB against ~156 KB for the other three
+  — it predated the pose mannequin rebuild (#6), so lying would have rendered as the old
+  crude figure beside three detailed ones. `poses.test.ts` did not catch it: it checks that
+  `poses.json` and the `.glb` files correspond by name, not that the binaries are current.
+  Re-running the generator produced 156 KB and left the other three byte-identical (so the
+  generator is deterministic and `main`'s assets are current).
+- **Base-anchoring no longer holds anywhere in the library, not just here.** Measured `Box3`
+  y-bounds after regeneration: standing −0.040→1.679, sitting 0.030→1.369, crouching
+  0.054→1.330, lying 0.027→0.308 (z −1.679→0.040). Lying floats 2.7 cm because `rootLift:
+  0.15` was tuned to the *old* torso radius — but standing sinks 4 cm and crouching floats
+  5.4 cm on `main` already. The rebuild broke the base-anchored convention across all four
+  poses; retuning one in isolation would make it the odd one out. Left for a library-wide
+  pass. Lying's shape is unaffected: horizontal, ~0.31 m deep, 1.68 m along −Z, face up.
 
 ## Test suite added (2026-08-01): DONE, 24 tests passing
 
