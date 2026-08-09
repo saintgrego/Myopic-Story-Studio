@@ -1,6 +1,9 @@
 import {
+  AIM_FRACTION,
   DEFAULT_AIM,
+  NOMINAL_FIGURE_HEIGHT,
   NOMINAL_FIGURE_MID_HEIGHT,
+  aimFraction,
   cameraAimPoint,
   cameraPosition,
   hasResolvedFocusSubject,
@@ -23,14 +26,18 @@ function character(overrides: Partial<Character> = {}): Character {
   };
 }
 
+// The fixture's camera is an MCU, so these exercise the tight-shot fraction unless
+// they override shotType.
+const MCU = AIM_FRACTION.MCU;
+
 describe('cameraAimPoint', () => {
-  it('aims at a primitive character’s mid-height above its base', () => {
+  it('aims at a fraction of a primitive character’s height above its base', () => {
     const scene = makeScene({
       characters: [character({ position: { x: 2, y: 0, z: -10 } })],
       camera: { ...makeScene().camera, focusSubjectId: 'char_01' },
     });
-    // Base-anchored: y is floor contact, so the aim point is half the capsule up.
-    expect(cameraAimPoint(scene)).toEqual({ x: 2, y: 0.9, z: -10 });
+    // Base-anchored: y is floor contact, so the aim rides that far up a 1.8 m capsule.
+    expect(cameraAimPoint(scene)).toEqual({ x: 2, y: 1.8 * MCU, z: -10 });
   });
 
   it('scales the aim height with the character scale', () => {
@@ -38,15 +45,15 @@ describe('cameraAimPoint', () => {
       characters: [character({ scale: 2 })],
       camera: { ...makeScene().camera, focusSubjectId: 'char_01' },
     });
-    expect(cameraAimPoint(scene).y).toBeCloseTo(1.8, 6);
+    expect(cameraAimPoint(scene).y).toBeCloseTo(2 * 1.8 * MCU, 6);
   });
 
-  it('adds the mid-height to a raised base rather than replacing it', () => {
+  it('adds the aim height to a raised base rather than replacing it', () => {
     const scene = makeScene({
       characters: [character({ position: { x: 0, y: 1.5, z: 0 } })],
       camera: { ...makeScene().camera, focusSubjectId: 'char_01' },
     });
-    expect(cameraAimPoint(scene).y).toBeCloseTo(2.4, 6);
+    expect(cameraAimPoint(scene).y).toBeCloseTo(1.5 + 1.8 * MCU, 6);
   });
 
   it('uses the nominal figure height for a gltf mesh, whose bounds load async', () => {
@@ -54,6 +61,39 @@ describe('cameraAimPoint', () => {
       characters: [character({ mesh: { kind: 'gltf', path: '/assets/poses/sitting.glb' } })],
       camera: { ...makeScene().camera, focusSubjectId: 'char_01' },
     });
+    expect(cameraAimPoint(scene).y).toBeCloseTo(NOMINAL_FIGURE_HEIGHT * MCU, 6);
+  });
+
+  // The point of the whole change: a tight shot has to aim higher than a wide one, or
+  // `lookAt` centres the frame on the hips and the head cannot be framed at all.
+  it('aims higher for a tighter shot type', () => {
+    const gltf = character({ mesh: { kind: 'gltf', path: '/assets/poses/standing.glb' } });
+    const at = (shotType: 'ECU' | 'CU' | 'MCU' | 'MS' | 'MLS' | 'LS' | 'ELS') =>
+      cameraAimPoint(
+        makeScene({ characters: [gltf], camera: { ...makeScene().camera, shotType, focusSubjectId: 'char_01' } }),
+      ).y;
+    const heights = (['ELS', 'LS', 'MLS', 'MS', 'MCU', 'CU', 'ECU'] as const).map(at);
+    expect(heights).toEqual([...heights].sort((a, b) => a - b));
+    expect(at('ECU')).toBeGreaterThan(1.5); // eye line on a 1.7 m figure
+    expect(at('MCU')).toBeGreaterThan(1.4); // chest-up framing is reachable
+  });
+
+  // Wide shots were the pre-existing behaviour and must not move: every scene saved
+  // before this change was framed against a mid-height aim.
+  it('leaves a gltf figure’s wide-shot aim exactly where it was', () => {
+    const scene = makeScene({
+      characters: [character({ mesh: { kind: 'gltf', path: '/assets/poses/standing.glb' } })],
+      camera: { ...makeScene().camera, shotType: 'LS', focusSubjectId: 'char_01' },
+    });
+    expect(cameraAimPoint(scene).y).toBeCloseTo(NOMINAL_FIGURE_MID_HEIGHT, 6);
+  });
+
+  it('falls back to the old mid-height fraction when shot type is flagged', () => {
+    const scene = makeScene({
+      characters: [character({ mesh: { kind: 'gltf', path: '/assets/poses/standing.glb' } })],
+      camera: { ...makeScene().camera, shotType: '[?]', focusSubjectId: 'char_01' },
+    });
+    expect(aimFraction('[?]')).toBe(aimFraction(undefined));
     expect(cameraAimPoint(scene).y).toBeCloseTo(NOMINAL_FIGURE_MID_HEIGHT, 6);
   });
 
@@ -87,7 +127,7 @@ describe('cameraAimPoint', () => {
       characters: [character({ position: { x: '[?]', y: '[?]', z: 3 } })],
       camera: { ...makeScene().camera, focusSubjectId: 'char_01' },
     });
-    expect(cameraAimPoint(scene)).toEqual({ x: 0, y: 0.9, z: 3 });
+    expect(cameraAimPoint(scene)).toEqual({ x: 0, y: 1.8 * MCU, z: 3 });
   });
 });
 
@@ -107,7 +147,7 @@ describe('subjectDistance', () => {
       camera: {
         ...makeScene().camera,
         focusSubjectId: 'char_01',
-        position: { x: 0, y: 0.9, z: 4 },
+        position: { x: 0, y: 1.8 * MCU, z: 4 },
       },
     });
     // Same height as the aim point, so the distance is the z offset alone.
@@ -120,7 +160,7 @@ describe('subjectDistance', () => {
       camera: {
         ...makeScene().camera,
         focusSubjectId: 'char_01',
-        position: { x: 0, y: 3.9, z: 4 },
+        position: { x: 0, y: 1.8 * MCU + 3, z: 4 },
       },
     });
     expect(subjectDistance(scene)).toBeCloseTo(5, 6); // 3-4-5
