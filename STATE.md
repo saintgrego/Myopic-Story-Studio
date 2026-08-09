@@ -1455,3 +1455,113 @@ behaviour, exactly the prompt-adherence question the previous entry predicted.
 - **A fallback used in more than one place belongs in a constant, immediately.** The FOV
   maths and the readout independently hard-coded 50; nothing would have caught the drift
   because both were individually correct.
+
+## Pose grounding derived, not eyeballed (2026-08-10): DONE, all four poses at minY = 0
+
+Closes the library-wide pass the `lying` entry above left open. The pose `.glb` files had
+drifted off the base-anchored convention when the mannequin body was rebuilt (#6) underneath
+`hipY` constants that had been eyeballed against the *old* capsule figure.
+
+Measured from the committed binaries with `GLTFLoader.parse` + `Box3` under plain Node
+(no jsdom, no WebGL), before and after:
+
+| pose | minY before | minY after | height (unchanged) |
+| --- | --- | --- | --- |
+| standing | −0.0398 (4.0 cm **into** the floor) | 0.0000 | 1.7188 |
+| sitting | +0.0302 | 0.0000 | 1.3388 |
+| crouching | +0.0539 | 0.0000 | 1.2759 |
+| lying | +0.0268 | 0.0000 | 0.2807 |
+
+All 12 prop proxies measured 0.0000 before and were not touched — the convention was intact
+everywhere except poses, which is what isolated the cause to the `POSES` table.
+
+**The fix is a measurement, not four new constants.** `buildFigure()` now ends with
+`root.position.y = -new THREE.Box3().setFromObject(root).min.y`. `rootLift` is subsumed by
+this and is gone from the pose table; `hipY` stays but is no longer load-bearing for floor
+contact — it sets pelvis height, i.e. how bent the legs read, and the grounding pass follows
+whatever it produces. Heights are identical before/after, confirming the change is a pure
+root translation and no geometry moved relative to anything else.
+
+Gates green: `npx tsc --noEmit`, `npm run test:ci` (110/110, 9 suites), `CI=true npm run
+build`. Verified in-browser on "Two Detectives — Office at Night" (standing + sitting
+glTF poses): both figures on the floor, sitting figure still meeting the chair.
+
+### Rules worth remembering
+
+- **A constant tuned by eye against geometry it does not own will drift silently the next
+  time that geometry changes.** `hipY` and `rootLift` were both correct when written and both
+  wrong within two days of the body rebuild, with nothing failing in between. Where the
+  correct value is *computable from what was built*, compute it — the derived form cannot go
+  stale, and it removes the "verified visually in the viewport, not derived" caveat the old
+  `POSES` comment carried as a standing invitation to re-eyeball.
+- **Measure the whole library before fixing one member of it.** Re-tuning `lying` alone (the
+  pose that prompted this) would have made it the only grounded figure of four. The one-line
+  Node measurement across poses *and* props is what turned "lying floats" into "the pose
+  generator lost the convention, props never did".
+- **This invalidates pose screenshot baselines, by design.** Rendered figures shift by up to
+  5.4 cm. Any byte-comparison baseline from the gel-filter milestone that contains a pose
+  proxy is expected to differ; that shift *is* the correction.
+
+## Pose grounding regression test (2026-08-10): DONE, negative-controlled
+
+`poses.test.ts` now loads every pose `.glb` with `GLTFLoader` and asserts
+`Box3.min.y` is within 1 mm of 0, plus `max.y > 0.1` so an empty scene graph cannot pass
+the grounding check trivially. A convention assertion, not a byte baseline: it stays true
+across any legitimate pose edit, where a frozen hash would need re-blessing every time.
+
+**Negative-controlled, both ways** — a test that has never been seen to fail is not evidence:
+
+- Restored `main`'s pre-fix `standing.glb` (minY −0.0398) → **fails**, reporting
+  `{ pose: "standing", grounded: false }`. Restored the fixed file → passes.
+- Restored the stale 87 KB `lying.glb` from `e9fde69` → **passes**.
+
+**That second result corrects the plan's premise.** The claim was that this one assertion
+would have caught the stale binary *and* the anchoring bug. It catches only the anchoring
+bug. The 87 KB file was the pre-rebuild crude figure, and it was *correctly grounded* — its
+constants matched the body it was built against. Staleness and grounding are independent
+failures, and the suite still cannot see staleness. The check that would is
+regenerate-and-compare (the generator is deterministic — verified when `lying` was rebased),
+which is not a frozen hash and never needs blessing. Not built; logged as open.
+
+### The jsdom spike: it works, at the cost of three shims
+
+The plan reserved a fallback to a `scripts/` check if `GLTFLoader` fought the sandbox. It
+fought, but every round was winnable and the test stays in the suite (one gate, not two):
+
+1. **`three/examples/jsm` is untransformed ESM.** CRA does not transform `node_modules`, so
+   the import died on `Cannot use import statement outside a module`. Fixed with a
+   `jest.transformIgnorePatterns` override in `package.json` (a CRA-supported key) carving
+   out `three/examples/jsm/`. **Arrays REPLACE rather than merge** in
+   `createJestConfig.js` — CRA's second pattern (`^.+\.module\.(css|sass|scss)$`) has to be
+   copied into the override by hand or CSS-module transforms break. Objects *do* merge
+   gracefully, which is why the `moduleNameMapper` entry below is safe.
+2. **No `TextDecoder` in Jest 27's jsdom** — the same generation gap as `structuredClone`.
+   Backfilled from `util` in `src/setupTests.ts`, alongside it.
+3. **The realm trap, and the one that will cost someone an hour.** `GLTFLoader.parse()`
+   gates its binary path on `data instanceof ArrayBuffer`. An ArrayBuffer from Node's `fs`
+   belongs to a different realm than the jsdom sandbox's `ArrayBuffer`, so the check is
+   false, the loader falls through to treating the raw buffer as an already-parsed glTF
+   object, and it reports **"Unsupported asset. glTF versions >=2.0 are supported."** on a
+   valid file. The error names the wrong problem entirely: the bytes were fine, and a
+   hand-rolled decode of the same buffer in the same test printed
+   `{"version":"2.0","generator":"THREE.GLTFExporter"}` two lines earlier. `Uint8Array.from(buf).buffer`
+   re-allocates inside the sandbox realm and it loads.
+
+Also added `moduleNameMapper: {"^three$": ".../build/three.cjs"}`. Jest 27 ignores the
+`exports` field, so bare `three` resolved to `main`, which is the deprecated UMD
+`build/three.js` — it printed a "deprecated with r150+, will be removed with r160" warning
+on every run of any suite importing three. Mapping to the `require` target the exports map
+already names silences it and uses the build three intends for CJS consumers.
+
+Gates green: `npx tsc --noEmit`, `npm run test:ci` (111/111, 9 suites), `CI=true npm run build`.
+
+### Rules worth remembering
+
+- **Run the negative control on both failures the test is claimed to cover, not one.** The
+  grounding assertion was justified by two past incidents; it demonstrably catches one of
+  them. Reverting each real artefact and watching the test fail took two minutes and stopped
+  a false claim of coverage from entering this file.
+- **A glTF "unsupported asset" error under Jest is a realm mismatch, not a bad file.** Check
+  `data instanceof ArrayBuffer` before you check the bytes.
+- **CRA jest overrides: arrays replace, objects merge.** Copy the defaults you still want out
+  of `react-scripts/scripts/utils/createJestConfig.js` when overriding an array key.
