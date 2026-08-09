@@ -604,9 +604,13 @@ section); the behaviour was verified in the browser by measuring the canvas.
 
 ### Rules worth remembering
 
-- **Fail open on persisted UI state.** `!== 'false'` rather than `=== 'true'` is deliberate:
+- ~~**Fail open on persisted UI state.** `!== 'false'` rather than `=== 'true'` is deliberate:
   the failure mode of a bad localStorage value should be a visible panel, not a vanished one.
-  Apply the same default to any future persisted chrome.
+  Apply the same default to any future persisted chrome.~~
+  **SUPERSEDED 2026-08-09 — the rule is now fail *closed*, `=== 'true'`.** See "Persisted panel
+  state flipped to fail-closed" at the end of this file. The collapsed rail added in `f58a563`
+  already guarantees a visible way back, which was this rule's entire justification. Kept here
+  as the record of the original reasoning, not as current guidance.
 - This is the first use of `localStorage` in the app. It holds **UI chrome only** — scene and
   storyboard data stay on disk via the backend. Don't let scene state drift into it.
 
@@ -1237,3 +1241,78 @@ character, not `[?]` and not a dangling reference.
   work is uncommitted, and it fails silently the moment it isn't — so don't use it at all.
   Assert the difference exists before trusting the comparison: check that a file the change
   adds (`src/lib/lighting.ts`) is *absent* from the tree that produced the "before" shot.
+
+## Persisted panel state flipped to fail-closed (2026-08-09): DONE, verified in-browser
+
+`src/App.tsx` only — one line inside `usePersistedOpen(key)`, plus its comment. No store,
+viewport, backend, schema, or parser changes.
+
+```
+- const [open, setOpen] = useState(() => localStorage.getItem(key) !== 'false');
++ const [open, setOpen] = useState(() => localStorage.getItem(key) === 'true');
+```
+
+Both persisted keys (`myopic.hierarchyOpen`, `myopic.propertiesOpen`) change together, because
+they share the hook.
+
+### This supersedes the 2026-08-01 "Fail open on persisted UI state" rule
+
+**New rule: fail closed, not fail open, on persisted UI state.** `=== 'true'` rather than
+`!== 'false'`. Apply this default to any future persisted chrome.
+
+This is a deliberate reversal, not a contradiction, and the earlier rule is not wrong on its own
+terms — it was written the same day the panels became collapsible, and its stated reason was
+that "a corrupt key can never leave a panel hidden with no obvious way back." That premise no
+longer holds: the collapsed state is a **36px rail carrying a chevron and a vertical label**
+(`f58a563`, also 2026-08-01), so a closed panel is always visibly one click from reopening.
+With the recovery path guaranteed by the layout, the fail-open default was buying nothing and
+costing a defaulted-open panel on first run. The owner's call. Treat the 2026-08-01 rule under
+"Collapsible panels + persisted collapse state" as **superseded by this section**; the section
+itself is left in place as the record of why the original choice was made.
+
+Note the read is case-sensitive and whitelist-shaped: **only** the exact string `'true'` opens a
+panel. `'TRUE'`, `'1'`, and any garbage value now resolve to closed — under the old predicate all
+three resolved to open. That widened set is the whole behavioural delta; an explicitly stored
+`'false'` behaved identically before and after.
+
+### Verified in-browser (fresh dev server, scene `Apartment Window Talk — Dusk` loaded)
+
+Panels only mount when a scene is loaded, so each check below is: set localStorage → reload →
+load a scene → read the grid class and the rail buttons. Interactions driven through
+`javascript_tool`, buttons found by their `title` attribute, never by index (Milestone 2/4 rule).
+
+- **Both keys absent** (cleared first, so no stale value from prior testing could mask the
+  default): `grid-cols-[36px,1fr,36px]`, both rails present ("Expand Hierarchy", "Expand
+  Properties"), each measuring 36×123px and visible, zero collapse chevrons. Screenshot confirms
+  the real layout — both rails drawn with `»`/`«` and vertical labels, viewport filling the
+  middle. No vanished or unreachable panel.
+- **Expand each rail** → `grid-cols-[240px,1fr,320px]`, storage becomes `true`/`true`; **reload**
+  → still expanded. Persistence works in the open direction.
+- **Collapse both, reload** → storage `false`/`false`, comes back `grid-cols-[36px,1fr,36px]`
+  with both rails. (Unchanged from before — an explicit `'false'` always persisted.)
+- **Corrupt values** `'garbage'` / `'TRUE'` → both panels closed, and the write-back effect
+  normalises storage to `'false'`. This is the case that actually diverges from the old
+  behaviour, where both would have opened.
+
+Measurement gotcha, cost some time: `window.innerWidth` read as `0` and the grid's *computed*
+middle column as `2px` while the browser preview pane was backgrounded, even though the rails
+measured a correct 36px and the screenshot showed a normal full-width layout. **Don't trust
+computed layout widths from `javascript_tool` when the pane isn't fronted — take a screenshot to
+confirm.** This is the second thing in this app found to misbehave in a hidden pane; anything
+that depends on the compositor actually running should be checked visually, not numerically.
+
+### Gates
+
+Run twice, because the change was verified on one base and committed on another. This branch is
+cut from `main`; the in-browser verification above was done on the `gel-filters-and-colour-
+temperature` working tree, where `App.tsx` is byte-identical to `main`'s.
+
+- `npx tsc --noEmit` — clean on both.
+- `npm run test:ci` — **78/78, 8 suites** on this branch; **88/88, 9 suites** on the gel-filters
+  branch, which carries the kelvin/parser tests `main` does not. This change adds and touches no
+  tests either way.
+- `npm run build` — compiled successfully on both (207.82 kB gzipped main here).
+
+No new tests. This is App.tsx chrome, still covered by the "Deliberately untested" note in the
+test-suite section — there's no React-rendering setup in the project, and the behaviour is a
+one-line predicate verified in the live app above.
