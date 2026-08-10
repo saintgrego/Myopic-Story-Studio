@@ -398,3 +398,58 @@ A rename to a symmetric `-male`/`-female` pair would read better and is delibera
 - [ ] A prompt describing a woman parses to a `-female` pose mesh.
 
 **Still out:** any third figure without a further amendment, body-type as an adjustable parameter, and figure choice as a field on `Character` — it rides the `mesh` reference like everything else.
+
+## v1.9 Amendment — Set Pieces (Walls, Floors, Ceilings, Doors, Windows)
+
+**Status:** Proposed
+**Depends on:** Nothing outstanding — v1.6 (Kelvin/gel), v1.7 (authored figures), and v1.8 (second figure) are all landed per `STATE.md`.
+**Classification:** Code change (schema + Viewport) — amendment required before implementation
+
+**Applying the section 11 test.** Sets are blocking information, not finish — a director needs to know where the walls, doors, and sightlines are to judge whether a shot reads, same as knowing where the furniture is. Nothing here adds shading, texture, or detail beyond flat cool-palette proxy geometry. **In scope.**
+
+### 1. Schema additions (`scene.ts`)
+
+```typescript
+type SetPieceKind = 'wall' | 'floor' | 'ceiling' | 'door' | 'window';
+
+interface SetPiece {
+  kind: SetPieceKind;
+  transform: Transform;       // existing Transform type
+  dimensions: { width: number; height: number; depth: number };
+  materialRef: string;        // cool-palette material, per §3
+  state?: 'open' | 'closed';  // doors/windows only; fixed at placement, no runtime toggle
+}
+
+interface SetVisibility {
+  walls: boolean;
+  floors: boolean;
+  ceilings: boolean;
+  doors: boolean;
+  windows: boolean;
+}
+```
+
+- `SetPiece.state` is set once at placement time and is not exposed as a mutable control. It is a discrete configuration choice, not an animatable property — does not violate the no-animation non-goal (section 2, item 6).
+- No per-piece visibility field. Visibility is category-level only, via `SetVisibility`.
+- A "hide all sets" action is UI-level convenience that sets all five `SetVisibility` fields to `false` in one operation. It is not a separate schema field.
+
+### 2. Viewport wiring
+
+- One `THREE.Group` per `SetPieceKind` category. Category visibility toggles group `.visible`, not per-mesh.
+- New "Sets" panel added to the existing panel system (Hierarchy/Properties pattern in `App.tsx`), exposing the five category toggles plus "hide all." Follows the fail-closed persisted-open convention established 2026-08-09 if collapse state is persisted.
+- `castShadow` / `receiveShadow` applied per existing convention.
+
+### 3. Material convention
+
+- Set pieces use the **cool palette**, consistent with the existing warm-character / cool-set-dressing rule. Not `WARM_GREYS`.
+
+### 4. Explicit non-goals for this pass
+
+- Parser inference layer is **not** touched. Set pieces are placed and toggled manually through the UI, not inferred from prompt text.
+- No door/window open↔closed runtime toggle. State is fixed at placement.
+- No per-piece visibility control.
+- No interaction with the pose/figure pipeline (v1.7/v1.8) — sets are environment, not character, geometry.
+
+### 5. Content, not code (no amendment needed)
+
+- Premade room presets (box, L-shape, etc.) are JSON scene graphs composed of `SetPiece` entries, built once this schema lands. Classified as content, same as pose-library additions — tracked in `STATE.md`, not the PRD.

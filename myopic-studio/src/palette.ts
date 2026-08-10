@@ -41,3 +41,20 @@ export function characterColor(index: number): number {
 export function propColor(index: number): number {
   return cycle(COOL_GREYS, index);
 }
+
+/**
+ * Set pieces (PRD §11 v1.9 §3) are cool, not warm — they are set dressing, the
+ * same side of the warm/cool split as props.
+ *
+ * The amendment gives `materialRef` no vocabulary, so one is defined here: the
+ * five ramp positions by name. Anything else falls back to cycling by the
+ * piece's index in `scene.sets`, which keeps adjacent pieces distinguishable
+ * without inventing a colour the palette doesn't own. Like every other colour in
+ * this file it is render-time only — nothing here reaches the .myo envelope.
+ */
+export const SET_MATERIAL_REFS = ['cool-0', 'cool-1', 'cool-2', 'cool-3', 'cool-4'] as const;
+
+export function setPieceColor(materialRef: string, index: number): number {
+  const named = SET_MATERIAL_REFS.indexOf(materialRef as (typeof SET_MATERIAL_REFS)[number]);
+  return named >= 0 ? COOL_GREYS[named] : cycle(COOL_GREYS, index);
+}

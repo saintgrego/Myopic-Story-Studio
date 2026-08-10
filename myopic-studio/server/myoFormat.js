@@ -15,6 +15,11 @@ function toMyoEnvelope(scene) {
     camera: scene.camera,
     characters: scene.characters,
     props: scene.props,
+    // PRD §11 v1.9. Written unconditionally; on the way back in, a file that
+    // predates the amendment simply has neither key and is normalised by
+    // withSetDefaults() in src/lib/sets.ts. No migration of existing files.
+    sets: scene.sets,
+    set_visibility: scene.setVisibility,
     storyboard_notes: scene.storyboardNotes,
     flagged_params: scene.flaggedParams,
   };
@@ -31,6 +36,8 @@ function fromMyoEnvelope(envelope) {
     camera: envelope.camera,
     characters: envelope.characters,
     props: envelope.props,
+    sets: envelope.sets,
+    setVisibility: envelope.set_visibility,
     storyboardNotes: envelope.storyboard_notes,
     flaggedParams: envelope.flagged_params,
   };

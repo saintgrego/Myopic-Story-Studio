@@ -14,6 +14,7 @@ import { FALLBACK_F_STOP, FALLBACK_FOCAL_LENGTH_MM, focusRange } from '../lib/do
 import { resolveLightColor } from '../lib/lighting';
 import type { Environment, MeshRef, SceneFile, Vec3 } from '../types/scene';
 import { characterColor, propColor } from '../palette';
+import { buildSetGroups } from '../lib/sets';
 import POSES from '../poses.json';
 import PROPS from '../props.json';
 
@@ -492,6 +493,10 @@ export default function Viewport() {
       group.scale.set(prop.scale.x || 1, prop.scale.y || 1, prop.scale.z || 1);
       contentGroup.add(group);
     }
+
+    // PRD §11 v1.9: five category groups, visibility carried by the group. All
+    // the set-piece logic lives in lib/sets.ts — see the note there on why.
+    contentGroup.add(buildSetGroups(scene));
 
     const sceneCamera = sceneCameraRef.current!;
     const aspect = aspectRatioToNumber(scene.camera.aspectRatio === '[?]' ? '16:9' : scene.camera.aspectRatio);

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { SceneFile } from '../types/scene';
+import { withSetDefaults } from '../lib/sets';
 
 export type Selection =
   | { kind: 'scene' }
@@ -45,7 +46,10 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
   scene: null,
   selection: null,
   dirty: false,
-  loadScene: (scene) => set({ scene, selection: { kind: 'scene' }, dirty: false }),
+  // The one funnel every scene passes through — parser output and loaded .myo
+  // alike — so the v1.9 set defaults are applied in exactly one place and the
+  // rest of the app can treat `sets`/`setVisibility` as always present.
+  loadScene: (scene) => set({ scene: withSetDefaults(scene), selection: { kind: 'scene' }, dirty: false }),
   select: (selection) => set({ selection }),
   setField: (path, value) => {
     const { scene } = get();

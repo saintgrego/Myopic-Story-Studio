@@ -82,6 +82,49 @@ export interface Prop {
   mesh: MeshRef;
 }
 
+/**
+ * PRD §11 v1.9 — set pieces.
+ *
+ * The amendment's schema block refers to "the existing Transform type"; no such
+ * type existed, so it is defined here once, matching the shape Prop already uses
+ * (rotation in DEGREES, converted at render time like every other rotation).
+ * Character/Prop keep their flat position/rotation/scale — folding them into
+ * this would change the .myo envelope for every saved scene, which v1.9 does
+ * not authorise.
+ */
+export interface Transform {
+  position: Vec3;
+  rotation: Vec3;  // degrees
+  scale: Vec3;
+}
+
+export type SetPieceKind = 'wall' | 'floor' | 'ceiling' | 'door' | 'window';
+
+export interface SetPiece {
+  kind: SetPieceKind;
+  transform: Transform;
+  /** Metres. position.y is base-anchored, as everywhere else in the model. */
+  dimensions: { width: number; height: number; depth: number };
+  /** Cool-palette material name (PRD §11 v1.9 §3). Resolve via setPieceColor(). */
+  materialRef: string;
+  /**
+   * Doors/windows only. Fixed at placement — v1.9 §4 explicitly rules out a
+   * runtime open↔closed toggle, so nothing in the UI may write this.
+   */
+  state?: 'open' | 'closed';
+}
+
+/** Category-level visibility. v1.9 §1: there is deliberately no per-piece flag. */
+export interface SetVisibility {
+  walls: boolean;
+  floors: boolean;
+  ceilings: boolean;
+  doors: boolean;
+  windows: boolean;
+}
+
+export type SetCategory = keyof SetVisibility;
+
 export interface SceneFile {
   sceneId: string;
   title: string;
@@ -92,6 +135,14 @@ export interface SceneFile {
   camera: Camera;
   characters: Character[];
   props: Prop[];
+  /**
+   * PRD §11 v1.9. Every .myo written before the amendment lacks both fields, so
+   * they are normalised at the load boundary (withSetDefaults in src/lib/sets.ts)
+   * rather than migrated on disk — same no-migration stance as environment.setting
+   * and fillColor/rimColor. Absent sets means [], absent visibility means all-true.
+   */
+  sets: SetPiece[];
+  setVisibility: SetVisibility;
   storyboardNotes: string;
   flaggedParams: string[];   // dot-paths of fields set to '[?]'
 }

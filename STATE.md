@@ -1856,3 +1856,72 @@ Gates green: `npx tsc --noEmit`, **114/114** (was 111), `CI=true npm run build`.
 - **When a change is meant to preserve old behaviour, derive the constant that preserves it.**
   `0.9 / 1.7` is exact; `0.53` is a millimetre off and would have moved every saved wide shot
   by a hair for no reason. Same rule as the pose grounding fix, one file over.
+
+## Set pieces — walls, floors, ceilings, doors, windows (2026-08-09): PRD §11 v1.9
+
+Schema + Viewport only. The parser is untouched by design (v1.9 §4): set pieces are placed
+and toggled manually, never inferred from prompt text.
+
+**Two things the amendment assumed that did not exist**, both resolved by defining them
+rather than by guessing at call sites:
+
+- **`Transform`.** §1's schema block says "existing Transform type"; nothing defined one —
+  `Character` and `Prop` carry flat `position`/`rotation`/`scale`. Defined once in
+  `scene.ts` as `{position, rotation, scale}` with rotation in *degrees*, matching `Prop`
+  and converted at render time like every other rotation. `Character`/`Prop` were **not**
+  refactored onto it: that would change the `.myo` envelope for every saved scene, which
+  v1.9 does not authorise.
+- **`materialRef` vocabulary.** §3 says "cool palette" and nothing else. `palette.ts` now
+  owns the names — `cool-0`…`cool-4` map to `COOL_GREYS`, anything else cycles the cool ramp
+  by the piece's index in `scene.sets`. Same render-time-only rule as v1.5: no colour reaches
+  the envelope, and `WARM_GREYS` is unreachable from a set piece (asserted).
+
+**Backward compatibility is normalised at one point, not migrated.** `withSetDefaults()` in
+`src/lib/sets.ts` is called from `sceneStore.loadScene` — the single funnel every scene passes
+through, parser output and loaded `.myo` alike — so absent `sets` becomes `[]` and absent
+`setVisibility` becomes all-true, and the rest of the app can treat both as always present.
+Same no-migration stance as `environment.setting` and `fillColor`/`rimColor`. A *partially*
+written `setVisibility` fills its gaps rather than being discarded. `myoFormat.js` gained
+`sets` / `set_visibility` (snake_case at the top level per §7.1) so pieces actually persist —
+it stays a pure mapping and does no defaulting, which is why the load-path test exercises
+`fromMyoEnvelope` → `withSetDefaults` together, as the app does.
+
+**Set-piece logic deliberately lives outside `Viewport.tsx`.** Viewport can't run under
+jsdom, and the group/visibility contract is exactly what is worth testing. `buildSetGroups()`
+returns the five category groups — always all five, in `SET_CATEGORIES` order, even when
+`sets` is empty — and Viewport does nothing but add the result. Visibility is set on the
+group and nowhere else, so no per-mesh flag exists to drift out of step with it.
+
+**Degenerate dimensions are clamped, not rejected.** A door or window authored as a flat
+cutout arrives with `depth: 0`. `BoxGeometry` accepts it, but a zero-extent axis yields
+degenerate faces and a `(0,0,0)` normal, which surfaces as black shading and NaNs once it
+meets a shadow matrix. Every extent is clamped to 0.01 m (and NaN/negative coerced), which
+still reads as a plane at blocking scale. Pieces are base-anchored like everything else:
+`transform.position.y` is where the piece meets the floor, and the box is lifted by half its
+height inside its own group — the same lift `buildObject()` applies to primitives.
+
+**Panel placement.** Sets shares the left column with Hierarchy as an accordion, each with
+its own fail-closed `usePersistedOpen` key, and the column widens if *either* is open. The
+collapsed rail shows both labels, so neither panel can hide the other — the failure mode a
+single shared collapse state would have had. "Hide all sets" is one `setField(['setVisibility'], …)`
+write, not five, so the viewport rebuilds once.
+
+**Verified:** a six-piece room (2 walls, floor, ceiling, closed door, `depth: 0` open window)
+rendered in-browser; unchecking *Ceilings* removed only the ceiling and left the room intact;
+"Hide all sets" cleared all five and disabled itself, leaving the existing window *prop*
+and the figures untouched — proof the category groups and the prop path are independent.
+Backward compat proved against the real pre-v1.9 file `1c39ce18-…myo`: loads with 0 pieces,
+all five toggles true, renders identically to before, dirty flag stays clean, no console
+errors. The verification scene was a scratch file, removed after; no user scene was written.
+Gates green: `npx tsc --noEmit`, **140/140** (was 114), `CI=true npm run build`.
+
+### Rules worth remembering
+
+- **When a spec cites a type that does not exist, define it — don't inline its shape.** Both
+  `Transform` and the `materialRef` vocabulary were holes in v1.9; filling them in one place
+  each is what kept `SetPiece` from sprouting a second source of truth per call site.
+- **Put the testable half of a Viewport feature in `lib/`.** Nothing in `Viewport.tsx` can be
+  tested; `buildSetGroups()` in `lib/sets.ts` carries the entire contract and is covered
+  category-by-category via `test.each`.
+- **Zero is a legal authored dimension, and Three.js will take it.** Clamp extents at the
+  geometry boundary; the failure shows up much later, in shading and shadow maths.

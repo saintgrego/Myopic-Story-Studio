@@ -1,5 +1,7 @@
 import { useSceneStore, characterIndex, propIndex } from '../store/sceneStore';
 import { makeScene } from '../testUtils/sceneFixture';
+import { allSetsHidden, defaultSetVisibility } from '../lib/sets';
+import type { SceneFile } from '../types/scene';
 
 // Zustand stores work outside React — drive the store via getState().
 beforeEach(() => {
@@ -101,6 +103,38 @@ describe('sceneStore', () => {
     expect(lighting.keyLightColor).toBe('#88AAFF');
     expect(lighting.fillIntensity).toBe(0.2);
     expect(lighting.rimIntensity).toBe(0.4);
+  });
+
+  // PRD §11 v1.9 — the store is the single funnel where set defaults are applied,
+  // and setField the single write path for the category toggles.
+  test('loadScene normalises a pre-v1.9 scene', () => {
+    const legacy = makeScene();
+    delete (legacy as Partial<SceneFile>).sets;
+    delete (legacy as Partial<SceneFile>).setVisibility;
+    useSceneStore.getState().loadScene(legacy);
+    const scene = useSceneStore.getState().scene!;
+    expect(scene.sets).toEqual([]);
+    expect(scene.setVisibility).toEqual(defaultSetVisibility());
+    expect(useSceneStore.getState().dirty).toBe(false);
+  });
+
+  test('setField toggles one category without disturbing the others', () => {
+    useSceneStore.getState().loadScene(makeScene());
+    useSceneStore.getState().setField(['setVisibility', 'ceilings'], false);
+    const { setVisibility } = useSceneStore.getState().scene!;
+    expect(setVisibility.ceilings).toBe(false);
+    expect(setVisibility.walls).toBe(true);
+    expect(setVisibility.floors).toBe(true);
+  });
+
+  test('hide-all is one write, replacing the whole setVisibility object', () => {
+    useSceneStore.getState().loadScene(makeScene());
+    const before = useSceneStore.getState().scene;
+    useSceneStore.getState().setField(['setVisibility'], allSetsHidden());
+    const after = useSceneStore.getState().scene!;
+    expect(after.setVisibility).toEqual(allSetsHidden());
+    expect(after).not.toBe(before); // exactly one new scene object, not five
+    expect(useSceneStore.getState().dirty).toBe(true);
   });
 
   test('characterIndex and propIndex find by id', () => {
