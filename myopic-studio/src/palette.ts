@@ -33,36 +33,41 @@ function cycle(ramp: readonly number[], index: number): number {
 }
 
 /**
- * Set-piece surfaces (PRD §11 v1.9). Walls, floors and ceilings are emphatically
- * *not people*, so they draw from the cool ramp — the same rule v1.5 set for props.
+ * Set pieces (PRD §11 v1.9 §3) are cool, not warm — they are set dressing, the
+ * same side of the warm/cool split as props.
  *
- * Unlike characters and props, a set piece is not coloured by its index: a room's
- * four walls are one surface and must read as one value, however many pieces it
- * took to build them. `materialRef` is that surface, and the ramp position is the
- * only thing it selects — this is still "which one is that", not a material system.
- * Nothing here is a texture, a finish, or a PBR parameter; the out-list in §11 is
- * untouched.
+ * The amendment gives `materialRef` no vocabulary, so one is defined here: the
+ * five ramp positions by name. Anything else falls back to cycling by the
+ * piece's index in `scene.sets`, which keeps adjacent pieces distinguishable
+ * without inventing a colour the palette doesn't own. Like every other colour in
+ * this file it is render-time only — nothing here reaches the .myo envelope.
+ *
+ * **Naming the position rather than the surface is deliberate**, and it was the
+ * live alternative: `brick`/`concrete`/`plaster` reads better and would let a
+ * room's four walls share one value however many pieces built them. It loses on
+ * two counts. A surface name is a promise the renderer cannot keep — flat greys
+ * are all §11 allows, so `brick` would name a material that never arrives — and
+ * it needs a fallback for unknown names that is *some* fixed value, which makes
+ * two adjacent hand-named walls merge into one silhouette. Naming the step keeps
+ * the vocabulary honest about what it selects, and index-cycling degrades toward
+ * legibility rather than away from it. Sameness across a room is then something
+ * the author states by giving the pieces the same ref.
  */
-export const SET_MATERIALS: readonly { ref: string; step: number }[] = [
-  { ref: 'brick', step: 0 },
-  { ref: 'concrete', step: 1 },
-  { ref: 'wood', step: 2 },
-  { ref: 'glass', step: 3 },
-  { ref: 'plaster', step: 4 },
-];
+export const SET_MATERIAL_REFS = ['cool-0', 'cool-1', 'cool-2', 'cool-3', 'cool-4'] as const;
 
-/** What a newly placed piece gets, and what the panel labels as the default surface. */
-export const DEFAULT_SET_MATERIAL_REF = 'plaster';
+export type SetMaterialRef = (typeof SET_MATERIAL_REFS)[number];
+
+/** What a newly placed piece gets when nothing else is specified. */
+export const DEFAULT_SET_MATERIAL_REF: SetMaterialRef = 'cool-2';
 
 /**
- * Cool grey for a set piece's surface. An unknown ref lands on the neutral value
- * rather than throwing or hashing to something arbitrary — a hand-edited `.myo`
- * naming a surface we don't have should still render, and visibly as a surface.
+ * Cool grey for a set piece. `index` is the piece's position in `scene.sets` —
+ * the array index, not a filtered counter, so hiding a category never re-colours
+ * anything (the same rule v1.5 fixed for characters and props).
  */
-export function setPieceColor(materialRef: string): number {
-  const key = typeof materialRef === 'string' ? materialRef.trim().toLowerCase() : '';
-  const entry = SET_MATERIALS.find((m) => m.ref === key);
-  return entry ? COOL_GREYS[entry.step] : NEUTRAL_GREY;
+export function setPieceColor(materialRef: string, index: number): number {
+  const named = SET_MATERIAL_REFS.indexOf(materialRef as SetMaterialRef);
+  return named >= 0 ? COOL_GREYS[named] : cycle(COOL_GREYS, index);
 }
 
 /** Warm grey for the nth character in the scene. */

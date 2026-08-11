@@ -3,6 +3,7 @@ import { parseScenePrompt } from './lib/parser';
 import { saveScene, listScenes, loadScene as fetchScene, SceneSummary } from './lib/sceneApi';
 import { useSceneStore } from './store/sceneStore';
 import SceneHierarchy from './components/SceneHierarchy';
+import SetsPanel from './components/SetsPanel';
 import PropertiesPanel from './components/PropertiesPanel';
 import Viewport from './components/Viewport';
 import StoryboardStrip from './components/StoryboardStrip';
@@ -29,6 +30,11 @@ export default function App() {
   const [showRaw, setShowRaw] = useState(false);
   const [hierarchyOpen, setHierarchyOpen] = usePersistedOpen('myopic.hierarchyOpen');
   const [propertiesOpen, setPropertiesOpen] = usePersistedOpen('myopic.propertiesOpen');
+  // PRD §11 v1.9: Sets shares the left column with Hierarchy as an accordion, so
+  // each keeps its own persisted (fail-closed) open state and neither can hide
+  // the other — the column widens if either is open.
+  const [setsOpen, setSetsOpen] = usePersistedOpen('myopic.setsOpen');
+  const leftOpen = hierarchyOpen || setsOpen;
 
   const [scenes, setScenes] = useState<SceneSummary[]>([]);
   const [selectedFilename, setSelectedFilename] = useState('');
@@ -217,40 +223,80 @@ export default function App() {
         {scene && !showRaw && (
           <div
             className={`grid h-[70vh] gap-4 transition-[grid-template-columns] duration-200 ${
-              hierarchyOpen && propertiesOpen
+              leftOpen && propertiesOpen
                 ? 'grid-cols-[240px,1fr,320px]'
-                : hierarchyOpen
+                : leftOpen
                 ? 'grid-cols-[240px,1fr,36px]'
                 : propertiesOpen
                 ? 'grid-cols-[36px,1fr,320px]'
                 : 'grid-cols-[36px,1fr,36px]'
             }`}
           >
-            {hierarchyOpen ? (
-              <div className="overflow-y-auto rounded-lg bg-zinc-800/60">
-                <h2 className="flex items-center justify-between border-b border-zinc-700 px-3 py-2 text-xs font-bold uppercase tracking-widest text-zinc-500">
-                  Hierarchy
-                  <button
-                    onClick={() => setHierarchyOpen(false)}
-                    title="Collapse Hierarchy"
-                    className="px-1 text-zinc-500 hover:text-zinc-300"
-                  >
-                    «
-                  </button>
-                </h2>
-                <SceneHierarchy />
+            {leftOpen ? (
+              <div className="flex min-h-0 flex-col gap-2">
+                <div
+                  className={`flex min-h-0 flex-col rounded-lg bg-zinc-800/60 ${
+                    hierarchyOpen ? 'flex-1' : ''
+                  }`}
+                >
+                  <h2 className="flex shrink-0 items-center justify-between border-b border-zinc-700 px-3 py-2 text-xs font-bold uppercase tracking-widest text-zinc-500">
+                    Hierarchy
+                    <button
+                      onClick={() => setHierarchyOpen(!hierarchyOpen)}
+                      title={hierarchyOpen ? 'Collapse Hierarchy' : 'Expand Hierarchy'}
+                      className="px-1 text-zinc-500 hover:text-zinc-300"
+                    >
+                      {hierarchyOpen ? '«' : '»'}
+                    </button>
+                  </h2>
+                  {hierarchyOpen && (
+                    <div className="min-h-0 flex-1 overflow-y-auto">
+                      <SceneHierarchy />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex shrink-0 flex-col rounded-lg bg-zinc-800/60">
+                  <h2 className="flex shrink-0 items-center justify-between border-b border-zinc-700 px-3 py-2 text-xs font-bold uppercase tracking-widest text-zinc-500">
+                    Sets
+                    <button
+                      onClick={() => setSetsOpen(!setsOpen)}
+                      title={setsOpen ? 'Collapse Sets' : 'Expand Sets'}
+                      className="px-1 text-zinc-500 hover:text-zinc-300"
+                    >
+                      {setsOpen ? '«' : '»'}
+                    </button>
+                  </h2>
+                  {setsOpen && (
+                    <div className="max-h-64 overflow-y-auto">
+                      <SetsPanel />
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
-              <button
-                onClick={() => setHierarchyOpen(true)}
-                title="Expand Hierarchy"
-                className="flex flex-col items-center gap-2 rounded-lg bg-zinc-800/60 py-2 text-zinc-500 hover:text-zinc-300"
-              >
-                <span>»</span>
-                <span className="text-[10px] font-bold uppercase tracking-widest [writing-mode:vertical-rl]">
-                  Hierarchy
-                </span>
-              </button>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => setHierarchyOpen(true)}
+                  title="Expand Hierarchy"
+                  className="flex flex-1 flex-col items-center gap-2 rounded-lg bg-zinc-800/60 py-2 text-zinc-500 hover:text-zinc-300"
+                >
+                  <span>»</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest [writing-mode:vertical-rl]">
+                    Hierarchy
+                  </span>
+                </button>
+                <button
+                  onClick={() => setSetsOpen(true)}
+                  title="Expand Sets"
+                  className="flex flex-col items-center gap-2 rounded-lg bg-zinc-800/60 py-2 text-zinc-500 hover:text-zinc-300"
+                >
+                  <span>»</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest [writing-mode:vertical-rl]">
+                    Sets
+                  </span>
+                </button>
+              </div>
             )}
 
             <Viewport />

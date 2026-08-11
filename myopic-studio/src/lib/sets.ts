@@ -118,10 +118,10 @@ function nonZeroScale(value: number): number {
  * where the piece meets the floor, and the box is lifted by half its height inside
  * the group. A ceiling at y = 2.7 therefore sits its underside at 2.7.
  */
-export function buildSetPiece(piece: SetPiece): THREE.Object3D {
+export function buildSetPiece(piece: SetPiece, index = 0): THREE.Object3D {
   const { width, height, depth } = resolveDimensions(piece.dimensions);
   const material = new THREE.MeshStandardMaterial({
-    color: setPieceColor(piece.materialRef),
+    color: setPieceColor(piece.materialRef, index),
     roughness: 0.9,
     metalness: 0.05,
   });
@@ -171,11 +171,13 @@ export function buildSetGroups(scene: SceneFile): THREE.Group[] {
     group.visible = visibility[key] !== false;
     groups.set(key, group);
   }
-  for (const piece of scene.sets ?? []) {
+  // The palette index is the piece's position in `scene.sets`, NOT a per-category
+  // counter — hiding one category must not re-colour the pieces in another.
+  for (const [i, piece] of (scene.sets ?? []).entries()) {
     const group = groups.get(categoryForKind(piece.kind));
     // An unrecognised kind (hand-edited file) has no category to hide it by, so it
     // is dropped rather than rendered into geometry no checkbox controls.
-    if (group) group.add(buildSetPiece(piece));
+    if (group) group.add(buildSetPiece(piece, i));
   }
   return SET_VISIBILITY_KEYS.map((key) => groups.get(key) as THREE.Group);
 }

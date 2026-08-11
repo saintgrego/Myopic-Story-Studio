@@ -14,7 +14,7 @@ import {
   resolveDimensions,
   withSetDefaults,
 } from '../lib/sets';
-import { COOL_GREYS, SET_MATERIALS, WARM_GREYS, setPieceColor } from '../palette';
+import { COOL_GREYS, SET_MATERIAL_REFS, WARM_GREYS, setPieceColor } from '../palette';
 import { useSceneStore } from '../store/sceneStore';
 import { makeScene, makeSetPiece } from '../testUtils/sceneFixture';
 import type { SceneFile, SetVisibility } from '../types/scene';
@@ -342,35 +342,35 @@ describe('buildSetPiece geometry', () => {
 });
 
 describe('set-piece materials', () => {
-  // Manifest-style over the table itself, so a surface added later is covered.
-  test.each(SET_MATERIALS.map((m) => m.ref))('%s resolves to a cool grey', (ref) => {
-    const color = setPieceColor(ref);
-    expect(COOL_GREYS).toContain(color);
-    expect(WARM_GREYS).not.toContain(color);
+  // Manifest-style over the vocabulary itself, so a ref added later is covered.
+  // Declare exactly one parameter: Jest reads a second one as a `done` callback
+  // and the test times out instead of running.
+  test.each(SET_MATERIAL_REFS)('%s names its own step in the cool ramp', (ref) => {
+    expect(setPieceColor(ref, 0)).toBe(COOL_GREYS[SET_MATERIAL_REFS.indexOf(ref)]);
+    expect(WARM_GREYS).not.toContain(setPieceColor(ref, 0));
   });
 
-  test('refs are unique and each names a real step in the ramp', () => {
-    expect(new Set(SET_MATERIALS.map((m) => m.ref)).size).toBe(SET_MATERIALS.length);
-    for (const { step } of SET_MATERIALS) {
-      expect(COOL_GREYS[step]).toBeDefined();
+  test('a named ref ignores the index entirely', () => {
+    for (const index of [0, 1, 4, 17, -3, NaN]) {
+      expect(setPieceColor('cool-3', index)).toBe(COOL_GREYS[3]);
     }
   });
 
-  test('lookup ignores case and surrounding space', () => {
-    expect(setPieceColor(' Concrete ')).toBe(setPieceColor('concrete'));
-  });
-
-  test('an unknown or missing ref degrades to the neutral grey, never to a warm one', () => {
-    for (const ref of ['velvet', '', undefined as unknown as string]) {
-      const color = setPieceColor(ref);
-      expect(COOL_GREYS).toContain(color);
-      expect(WARM_GREYS).not.toContain(color);
+  test('an unknown or missing ref cycles by index, and never lands warm', () => {
+    for (const ref of ['velvet', '', 'COOL-1', undefined as unknown as string]) {
+      expect(setPieceColor(ref, 0)).toBe(COOL_GREYS[0]);
+      expect(setPieceColor(ref, 7)).toBe(COOL_GREYS[2]);
+      expect(WARM_GREYS).not.toContain(setPieceColor(ref, 3));
     }
   });
 
-  test('set pieces are coloured by surface, not by index', () => {
+  test('pieces sharing a ref render as one surface, however many there are', () => {
     const scene = makeScene({
-      sets: [makeSetPiece('wall'), makeSetPiece('wall'), makeSetPiece('wall')],
+      sets: [
+        makeSetPiece('wall', { materialRef: 'cool-1' }),
+        makeSetPiece('wall', { materialRef: 'cool-1' }),
+        makeSetPiece('wall', { materialRef: 'cool-1' }),
+      ],
     });
     const colors: number[] = [];
     buildSetGroups(scene)[0].traverse((child) => {
@@ -380,5 +380,27 @@ describe('set-piece materials', () => {
     });
     expect(colors).toHaveLength(3);
     expect(new Set(colors).size).toBe(1);
+  });
+
+  // The v1.5 rule, which the index fallback is the one thing that could break:
+  // colour must come from the piece's position in scene.sets, not a filtered
+  // counter, or hiding a category would re-colour what is left.
+  test('the index fallback counts across scene.sets, not within a category', () => {
+    const unnamed = { materialRef: 'unnamed' };
+    const scene = makeScene({
+      sets: [
+        makeSetPiece('floor', unnamed),
+        makeSetPiece('wall', unnamed),
+        makeSetPiece('wall', unnamed),
+      ],
+    });
+    const wallColors: number[] = [];
+    buildSetGroups(scene)[0].traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        wallColors.push((child.material as THREE.MeshStandardMaterial).color.getHex());
+      }
+    });
+    // Walls are at scene.sets 1 and 2 — so cool-1 and cool-2, not cool-0 and cool-1.
+    expect(wallColors).toEqual([COOL_GREYS[1], COOL_GREYS[2]]);
   });
 });

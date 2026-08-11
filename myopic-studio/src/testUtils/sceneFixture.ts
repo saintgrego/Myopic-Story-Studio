@@ -83,7 +83,7 @@ export function makeSetPiece(kind: SetPieceKind, overrides: Partial<SetPiece> = 
       scale: { x: 1, y: 1, z: 1 },
     },
     dimensions,
-    materialRef: kind === 'window' ? 'glass' : 'plaster',
+    materialRef: kind === 'window' ? 'cool-4' : 'cool-2',
     ...overrides,
   };
 }
