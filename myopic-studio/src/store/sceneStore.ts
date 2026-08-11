@@ -9,7 +9,6 @@ export type Selection =
   | { kind: 'camera' }
   | { kind: 'character'; id: string }
   | { kind: 'prop'; id: string }
-  | { kind: 'sets' }
   | null;
 
 export type PathSegment = string | number;

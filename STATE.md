@@ -1959,3 +1959,65 @@ viewport renders for real (GL renderer reports `WebKit WebGL`, canvas 958×698).
 `moduleResolution: node10` and looked like a real tsconfig problem. It is not — that file is
 pinned deliberately (react-scripts rewrites it). Run `npm install` first and confirm
 `npx tsc --version` says **4.9.5** before believing anything the typechecker says.
+
+## Set pieces, second pass (2026-08-11): adopted the `set-pieces` branch's vocabulary and panel
+
+**How this came about, because the process failure is the useful part.** PR #25 built v1.9
+from an implementation prompt that cited "the existing `Transform` type" and "§3 of the
+amendment". Neither was on `main`, so both were treated as holes in the brief and filled:
+`Transform` was introduced, and a v1.9 amendment was written from scratch. **Both already
+existed — on the unmerged `origin/set-pieces` branch (`1e18583`, 9 August), which is a
+complete implementation of this same feature**, carrying the real amendment text
+(`PRD.md:402`, numbered §1–§5, status *Proposed*), a `Transform` type, its own `sets.ts`,
+a 190-line test file, and a STATE.md entry.
+
+The branch list was visible in this session before #25 was opened and was not read.
+**A remote branch whose name matches the feature you are about to build is worth thirty
+seconds** — `git log origin/<branch>` would have turned the whole task into a review.
+Nothing was lost (#25 is merged and green), but two of its stated findings — "the amendment
+does not exist", "there is no `Transform` type" — were true only of `main`, and the PR body
+and this file both said so more broadly than the evidence supported.
+
+**What was adopted here**, on the owner's call after the two implementations were compared:
+
+- **`materialRef` vocabulary**, from `origin/set-pieces`. `SET_MATERIAL_REFS` is
+  `cool-0` … `cool-4` — the ramp position by name — and an unrecognised ref cycles by the
+  piece's index in `scene.sets`. This replaces the merged version's semantic surfaces
+  (`brick`/`concrete`/`wood`/`glass`/`plaster`) with a fixed `NEUTRAL_GREY` fallback.
+  `setPieceColor()` takes `(materialRef, index)` now.
+  **Why the position wins:** a surface name promises a material §11 does not allow the
+  renderer to deliver, and its fallback has to be one fixed value, which merges two adjacent
+  hand-named walls into a single silhouette. Index-cycling degrades toward legibility.
+  "A room's four walls read as one value" survives as something the author *states* by
+  giving them the same ref, rather than something the vocabulary implies.
+  The index is the position in `scene.sets`, never a filtered counter — asserted directly,
+  since that fallback is the one thing here that could break the v1.5 rule.
+- **Panel placement**, from the same branch. Sets is now an accordion sharing the left column
+  with Hierarchy (`leftOpen = hierarchyOpen || setsOpen`, each with its own fail-closed
+  `usePersistedOpen` key), not a `{kind:'sets'}` selection rendered in Properties. The
+  selection kind, its hierarchy node and the PropertiesPanel branch are all removed.
+  Category visibility is a viewing mode you work *through* while looking at something else,
+  which is what makes it a standing control rather than a selected object.
+
+Untouched: the schema, the group/visibility contract, backward compatibility, base
+anchoring, the hinge swing, and the dimension clamp. `PRD.md`'s v1.9 amendment is rewritten
+where it argued for the vocabulary that lost — the old reasoning is left visible and marked
+as overturned rather than deleted.
+
+**Also still open, and not this change's to decide:** `origin/set-pieces` carries one commit
+that is genuinely unmerged and not duplicated by #25 — `ac1b99f`, "Aim the shot camera by
+shot type, not always at mid-height" (`framing.ts`). It also sits alone on
+`origin/camera-aim-height`, cleanly on top of current `main`, so it is not at risk.
+
+**Gates:** `npx tsc --noEmit` clean · `npm run test:ci` 151 passed, 10 suites ·
+`CI=true npm run build` compiled successfully.
+
+**Jest trap, cost ~10 minutes:** `test.each(ARRAY)('…', (ref, i) => {…})` over an array of
+plain values times out at 5000 ms on every case rather than failing. Jest reads the second
+parameter as a `done` callback and waits for a call that never comes. Declare exactly one
+parameter.
+
+**Screenshots refreshed** (`docs/set-pieces-*.png`) — the originals showed the panel in the
+Properties column, which no longer exists. The new set covers the case the accordion has to
+get right: **Sets open with Hierarchy collapsed**, where the left column must widen for Sets
+alone rather than staying a 36 px rail.
