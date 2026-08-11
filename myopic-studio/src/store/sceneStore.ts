@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { withSetDefaults } from '../lib/sets';
 import type { SceneFile } from '../types/scene';
 
 export type Selection =
@@ -45,7 +46,9 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
   scene: null,
   selection: null,
   dirty: false,
-  loadScene: (scene) => set({ scene, selection: { kind: 'scene' }, dirty: false }),
+  // Every scene enters the app here — parsed or loaded from disk — so this is the one
+  // place the v1.9 set-piece defaults need applying (PRD §11 v1.9).
+  loadScene: (scene) => set({ scene: withSetDefaults(scene), selection: { kind: 'scene' }, dirty: false }),
   select: (selection) => set({ selection }),
   setField: (path, value) => {
     const { scene } = get();

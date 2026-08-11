@@ -1,4 +1,4 @@
-import type { SceneFile } from '../types/scene';
+import type { SceneFile, SetPiece, SetPieceKind } from '../types/scene';
 
 // A complete, valid SceneFile for tests. Kept outside __tests__/ because CRA's
 // Jest treats every file in a __tests__ directory as a test suite.
@@ -57,8 +57,33 @@ export function makeScene(overrides: Partial<SceneFile> = {}): SceneFile {
         mesh: { kind: 'primitive', shape: 'box', dimensions: [0.8, 2, 1] },
       },
     ],
+    sets: [],
+    setVisibility: { walls: true, floors: true, ceilings: true, doors: true, windows: true },
     storyboardNotes: 'Tense, isolated mood.',
     flaggedParams: ['environment.weather'],
+    ...overrides,
+  };
+}
+
+/** A placed set piece (PRD §11 v1.9), sized like the real thing for its kind. */
+export function makeSetPiece(kind: SetPieceKind, overrides: Partial<SetPiece> = {}): SetPiece {
+  const dimensions = {
+    wall: { width: 4, height: 2.7, depth: 0.15 },
+    floor: { width: 6, height: 0.05, depth: 6 },
+    ceiling: { width: 6, height: 0.05, depth: 6 },
+    door: { width: 0.9, height: 2.05, depth: 0.05 },
+    window: { width: 1.2, height: 1.4, depth: 0.05 },
+  }[kind];
+
+  return {
+    kind,
+    transform: {
+      position: { x: 0, y: kind === 'ceiling' ? 2.7 : 0, z: -2 },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+    },
+    dimensions,
+    materialRef: kind === 'window' ? 'cool-4' : 'cool-2',
     ...overrides,
   };
 }
