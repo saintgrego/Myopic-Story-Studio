@@ -31,6 +31,7 @@ import {
   TextField,
 } from './fields';
 import KelvinGelControl from './KelvinGelControl';
+import SetsPanel from './SetsPanel';
 import POSES from '../poses.json';
 import PROPS from '../props.json';
 
@@ -361,6 +362,13 @@ export default function PropertiesPanel() {
         />
       </PanelSection>
     );
+  }
+
+  // PRD §11 v1.9. Selection-driven like every other panel section, rather than a
+  // third collapsible column: set visibility is a property of the scene, and the
+  // hierarchy is already how this app navigates to scene-level properties.
+  if (selection.kind === 'sets') {
+    return <SetsPanel />;
   }
 
   if (selection.kind === 'camera') {

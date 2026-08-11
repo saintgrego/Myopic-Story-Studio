@@ -12,6 +12,7 @@ import {
 } from '../lib/framing';
 import { FALLBACK_F_STOP, FALLBACK_FOCAL_LENGTH_MM, focusRange } from '../lib/dof';
 import { resolveLightColor } from '../lib/lighting';
+import { buildSetGroups } from '../lib/sets';
 import type { Environment, MeshRef, SceneFile, Vec3 } from '../types/scene';
 import { characterColor, propColor } from '../palette';
 import POSES from '../poses.json';
@@ -492,6 +493,12 @@ export default function Viewport() {
       group.scale.set(prop.scale.x || 1, prop.scale.y || 1, prop.scale.z || 1);
       contentGroup.add(group);
     }
+
+    // Set pieces (PRD §11 v1.9). Five category groups, always all five, each one
+    // carrying its own `.visible` — the meshes inside never get a visibility flag.
+    // They join contentGroup like everything else, so disposeObject3D above frees
+    // their geometry and materials on the next rebuild.
+    for (const group of buildSetGroups(scene)) contentGroup.add(group);
 
     const sceneCamera = sceneCameraRef.current!;
     const aspect = aspectRatioToNumber(scene.camera.aspectRatio === '[?]' ? '16:9' : scene.camera.aspectRatio);

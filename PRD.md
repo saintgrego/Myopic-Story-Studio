@@ -398,3 +398,35 @@ A rename to a symmetric `-male`/`-female` pair would read better and is delibera
 - [ ] A prompt describing a woman parses to a `-female` pose mesh.
 
 **Still out:** any third figure without a further amendment, body-type as an adjustable parameter, and figure choice as a field on `Character` — it rides the `mesh` reference like everything else.
+
+### v1.9 — 11 August 2026: set pieces (walls, floors, ceilings, doors, windows)
+
+**Requested by the owner on 11 August 2026.** Written after the implementation prompt that authorized it; the prompt is the authorization, this is the record of what it decided.
+
+**Applying the section 11 test.** A room is not set dressing — it is the constraint the blocking happens inside. Where a figure can stand, whether the key can reach her, whether he can see her from the doorway, and what a 35mm actually contains at the far wall are all *blocking* questions, and none of them can be answered against an infinite grey plane. This is geometry that answers "where is everyone standing", not finish that answers "does this look real". **In scope.** Nothing here touches shading: same lights, same flat materials, same tone mapping, and the out-list is untouched.
+
+**Schema change (section 5).** `SceneFile` gains two fields:
+
+- `sets: SetPiece[]` — each piece is `{ kind, transform, dimensions, materialRef, state? }`, where `kind` is one of `wall | floor | ceiling | door | window`, `transform` is `{position, rotation, scale}` (rotation in degrees, matching characters and props), and `dimensions` is a named `{width, height, depth}` box.
+- `setVisibility: SetVisibility` — five booleans, one per category.
+
+**Backward compatibility, not migration.** Every `.myo` on disk predates both fields. They default at the load boundary — `[]` and all-true — exactly as `environment.setting` and `fillColor`/`rimColor` do. No migration script, and no file is rewritten until the user saves it themselves. `.myo` files are the user's data.
+
+**A set piece is a box, not a mesh reference.** This deliberately breaks the pattern v1.2 and v1.4 set for poses and props, and the reason is that the pattern does not apply: a pose library exists because a sitting figure cannot be described parametrically, whereas a wall is fully described by three numbers and a transform. Introducing `/assets/sets/wall.glb` would add an asset pipeline that answers no question the box does not. Section 4's mesh abstraction is untouched — set pieces are not characters or props and carry no `mesh` reference at all.
+
+**Colour comes from the cool ramp, by surface rather than by index** (`SET_MATERIALS` in `src/palette.ts`). Walls are emphatically not people, so warm greys are out per v1.5. Index-cycling is also wrong here: a room's four walls are one surface and must read as one value however many pieces built them, so `materialRef` names the surface and selects the ramp step. This is not a material system — no textures, no finishes, no PBR.
+
+**Placed by hand, and only by hand.** The parser is untouched: set pieces are never inferred from prompt text. A prompt saying "a cramped room" produces no walls. This is a deliberate limit — a guessed room is worse than no room, because the director would have to check every wall before trusting any of them.
+
+**Visibility is category-level only.** Five checkboxes and a "hide all sets" button, on the scene. There is no per-piece visibility flag: the ask is "take the fourth wall out so I can see in", not "hide this particular panel". Groups are what carry `.visible`; no mesh is ever individually hidden.
+
+**Door and window `state` is fixed at placement.** `'open' | 'closed'`, set when the piece is placed, with no runtime control to swing it. An open leaf is drawn swung on its hinge because a door drawn flush answers the wrong question — whether the leaf is in shot, and whether it blocks the sightline through the opening, is the blocking question the piece exists for.
+
+**Still out, and not to be built without a further amendment:** parser inference of set pieces, a runtime open/close control, per-piece visibility, glTF set-piece assets, and anything on section 11's rendering out-list. Boolean cutouts (a real hole in a wall for a window) are also out — a window is a piece placed in front of the wall, not a subtraction from it.
+
+**Acceptance**
+
+- [x] A pre-existing `.myo` loads with `sets: []` and all five categories visible, and is not rewritten on disk.
+- [x] A scene with a piece in each category builds five groups; toggling one category's boolean changes only that group.
+- [x] A door or window with `depth: 0` renders as a thin plane rather than degenerate or NaN geometry.
+- [x] `npx tsc --noEmit`, `npm run test:ci` and `CI=true npm run build` stay green.

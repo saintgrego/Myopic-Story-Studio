@@ -18,6 +18,8 @@ describe('myoFormat envelope mapping (PRD §7.1)', () => {
         'camera',
         'characters',
         'props',
+        'sets',
+        'set_visibility',
         'storyboard_notes',
         'flagged_params',
       ].sort()
@@ -25,6 +27,7 @@ describe('myoFormat envelope mapping (PRD §7.1)', () => {
     expect(envelope).not.toHaveProperty('sceneId');
     expect(envelope).not.toHaveProperty('storyboardNotes');
     expect(envelope).not.toHaveProperty('flaggedParams');
+    expect(envelope).not.toHaveProperty('setVisibility');
   });
 
   test('nested content stays camelCase and untouched', () => {
