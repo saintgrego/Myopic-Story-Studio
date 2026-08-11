@@ -70,6 +70,13 @@ export default function SceneHierarchy() {
         onClick={() => select({ kind: 'lighting' })}
       />
       <Node
+        label={`Sets (${scene.sets?.length ?? 0})`}
+        depth={1}
+        selection={{ kind: 'sets' }}
+        current={selection}
+        onClick={() => select({ kind: 'sets' })}
+      />
+      <Node
         label="Camera"
         depth={1}
         selection={{ kind: 'camera' }}

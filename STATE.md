@@ -1814,3 +1814,110 @@ hardcoded T-pose, `GLTFLoader` treating a foreign-realm buffer as a parsed docum
 produced output that looked like an answer. The grounding work at the start of the day and
 the rigging work at the end were the same lesson twice: *derive the value, and make the
 un-derivable case loud.*
+
+## Set pieces (2026-08-11): PRD §11 v1.9, schema + viewport, built
+
+Walls, floors, ceilings, doors and windows, placed by hand and toggled by category. Scope
+was fixed by the implementation prompt and deliberately narrow: **no parser inference, no
+runtime open/close control, no per-piece visibility.** The pose/figure pipeline (v1.7/v1.8)
+and the Kelvin/gel work (v1.6) were not touched.
+
+**The PRD amendment did not exist when the work started.** The prompt cited "PRD.md v1.9"
+as its authorization, but §11 ended at v1.8 — the amendment was written as part of this
+change (§10 requires the decision to be logged, not assumed). Two other details in the
+prompt did not match the repo and were resolved rather than guessed at:
+
+- **"reuse existing `Transform` type — do not redefine"** — there was no `Transform` type
+  anywhere in `src/`. Characters and props carry `position`/`rotation`/`scale` flat, because
+  the parser writes them that way and their positions can be flagged `[?]`. `Transform` is
+  therefore *introduced* in `src/types/scene.ts`, matching those conventions (rotation in
+  degrees, plain `Vec3` — a set piece is never parsed, so it has no sentinel to resolve).
+- **"follow existing panel pattern in App.tsx"** — App.tsx's pattern is two collapsible grid
+  columns with a 4-way `grid-template-columns` switch; a third would make it 8-way. Set
+  visibility is a *scene property*, and this app already navigates to those through the
+  hierarchy, so `SetsPanel` is selection-driven (`{kind:'sets'}`) and renders inside the
+  Properties column like Lighting and Camera do. No new persisted collapse state, so
+  `usePersistedOpen` is untouched — the 2026-08-09 fail-closed fix stands.
+
+**Where the code went, and why not in Viewport.tsx.** `src/lib/sets.ts` holds the defaults,
+the category mapping, and the group builder; Viewport.tsx calls `buildSetGroups(scene)` in
+one line and adds the result to `contentGroup` (so the existing `disposeObject3D` frees it).
+Same reason `dof.ts` and `framing.ts` exist: anything inside Viewport.tsx is untestable by
+construction. Plain Three.js objects — no renderer, no WebGL — run fine under jsdom, so the
+group/visibility contract is asserted directly rather than screenshotted.
+
+**Decisions worth keeping:**
+
+- **A set piece is a box, not a `mesh` reference.** Poses and props are library glTFs because
+  a sitting figure can't be described parametrically. A wall can — three numbers and a
+  transform. An `/assets/sets/wall.glb` would buy an asset pipeline and answer nothing.
+- **Colour by surface, not by index.** `materialRef` → a step in `COOL_GREYS`
+  (`SET_MATERIALS` in `palette.ts`). v1.5 cycles props by array index so neighbours differ;
+  that is exactly wrong for a room, whose four walls are one surface and must read as one
+  value however many pieces built them. Unknown ref → `NEUTRAL_GREY`, never a warm grey.
+- **Base-anchored, like everything else.** `transform.position.y` is where the piece meets
+  the floor; the box is lifted by half its height inside its group. A ceiling at 2.7 sits its
+  underside at 2.7. `height` is the Y extent always — for a floor slab that means thickness.
+- **An open door swings on its hinge.** `state` is fixed at placement (no runtime control,
+  per the scope constraint), but drawing an open leaf flush in its frame answers the wrong
+  question: whether the leaf is in shot and whether it blocks the sightline is the whole
+  reason the piece is there. Pivot is the leaf's -X edge, 75°.
+- **`depth: 0` clamps to 1 mm, it does not pass through.** BoxGeometry accepts a zero extent
+  and NaN happily and produces geometry with no volume — invisible, and the NaN propagates
+  into the bounding sphere and breaks frustum culling for the *whole scene*. Same class as
+  the fallbacks-that-return-plausible-values lesson from 10 August: the degenerate case has
+  to be made loud, or clamped honestly. `resolveDimensions()` clamps; `MIN_SET_PIECE_EXTENT`
+  is 0.001.
+
+**Backward compatibility, proven against real files rather than a fixture.** Defaults land
+at the two load boundaries — `withSetDefaults()` in `sceneStore.loadScene` (covers both the
+parser path and the disk path) and `fromMyoEnvelope()` in `server/myoFormat.js` (CommonJS
+duplicate of the same rule; the src/server split is pre-existing). Evidence, from a live
+backend on :4011:
+
+```
+--- legacy file keys on disk:
+scene_id, title, created, prompt, environment, lighting, camera, characters, props,
+storyboard_notes, flagged_params          <- no sets, no set_visibility
+--- same file loaded through GET /api/scenes/1c39ce18-….myo:
+{"sets":[],"setVisibility":{"walls":true,"floors":true,"ceilings":true,"doors":true,"windows":true}}
+--- file on disk after load:  (git status scenes/ — clean, nothing rewritten)
+```
+
+Save path, same backend, a scene carrying four pieces with `ceilings: false`:
+
+```
+--- top-level keys written to disk:
+scene_id, title, created, prompt, environment, lighting, camera, characters, props,
+sets, set_visibility, storyboard_notes, flagged_params
+set_visibility: {"walls":true,"floors":true,"ceilings":false,"doors":true,"windows":true}
+sets[2]: {"kind":"door", …, "dimensions":{"width":0.9,"height":2.05,"depth":0.05},
+          "materialRef":"wood","state":"open"}
+--- read back through GET:  sets: 4 | ceilings hidden: true
+```
+
+The temporary `.myo` written for that check was deleted; `scenes/` is back to its eight
+files and `git status scenes/` is clean. `sets` and `set_visibility` are snake_case at the
+top level per §7.1, camelCase inside, like every other key.
+
+**Toggle evidence is from the test suite, not a screenshot — no browser tooling in this
+session.** `src/__tests__/sets.test.ts` (33 cases) drives it directly: a piece in each of
+the five categories, then `test.each(SET_VISIBILITY_KEYS)` hides one category at a time and
+asserts the other four groups stay visible *and* that no mesh inside any group ever carries
+its own `visible: false` — the category-only rule, asserted rather than assumed. Also
+covered: empty `sets` → five empty groups and zero geometry; a scene missing both fields
+entirely; `depth: 0` → a 1 mm plane with finite bounds; a whole scene of `{0, NaN, -1}`
+dimensions building without NaN; base-anchoring and degree-rotation; the every-`.myo`-on-disk
+manifest test (iterates `scenes/`, so a file added later is covered without editing the test).
+**Not verified: what any of this looks like on screen.** The renderer path is one line and
+the geometry is asserted, but nobody has seen a wall in the viewport yet — worth a look
+before this is called finished.
+
+**Gates, in order, all green:** `npx tsc --noEmit` clean · `npm run test:ci` 151 passed,
+10 suites · `CI=true npm run build` compiled successfully.
+
+**Gotcha for the next person:** `node_modules/` was not installed in this container and
+`npx tsc` silently resolved a *global* TypeScript 6.0.2, which failed on
+`moduleResolution: node10` and looked like a real tsconfig problem. It is not — that file is
+pinned deliberately (react-scripts rewrites it). Run `npm install` first and confirm
+`npx tsc --version` says **4.9.5** before believing anything the typechecker says.

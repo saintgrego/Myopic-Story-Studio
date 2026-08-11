@@ -32,6 +32,39 @@ function cycle(ramp: readonly number[], index: number): number {
   return ramp[i % ramp.length];
 }
 
+/**
+ * Set-piece surfaces (PRD §11 v1.9). Walls, floors and ceilings are emphatically
+ * *not people*, so they draw from the cool ramp — the same rule v1.5 set for props.
+ *
+ * Unlike characters and props, a set piece is not coloured by its index: a room's
+ * four walls are one surface and must read as one value, however many pieces it
+ * took to build them. `materialRef` is that surface, and the ramp position is the
+ * only thing it selects — this is still "which one is that", not a material system.
+ * Nothing here is a texture, a finish, or a PBR parameter; the out-list in §11 is
+ * untouched.
+ */
+export const SET_MATERIALS: readonly { ref: string; step: number }[] = [
+  { ref: 'brick', step: 0 },
+  { ref: 'concrete', step: 1 },
+  { ref: 'wood', step: 2 },
+  { ref: 'glass', step: 3 },
+  { ref: 'plaster', step: 4 },
+];
+
+/** What a newly placed piece gets, and what the panel labels as the default surface. */
+export const DEFAULT_SET_MATERIAL_REF = 'plaster';
+
+/**
+ * Cool grey for a set piece's surface. An unknown ref lands on the neutral value
+ * rather than throwing or hashing to something arbitrary — a hand-edited `.myo`
+ * naming a surface we don't have should still render, and visibly as a surface.
+ */
+export function setPieceColor(materialRef: string): number {
+  const key = typeof materialRef === 'string' ? materialRef.trim().toLowerCase() : '';
+  const entry = SET_MATERIALS.find((m) => m.ref === key);
+  return entry ? COOL_GREYS[entry.step] : NEUTRAL_GREY;
+}
+
 /** Warm grey for the nth character in the scene. */
 export function characterColor(index: number): number {
   return cycle(WARM_GREYS, index);
