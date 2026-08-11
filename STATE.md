@@ -1900,8 +1900,8 @@ The temporary `.myo` written for that check was deleted; `scenes/` is back to it
 files and `git status scenes/` is clean. `sets` and `set_visibility` are snake_case at the
 top level per §7.1, camelCase inside, like every other key.
 
-**Toggle evidence is from the test suite, not a screenshot — no browser tooling in this
-session.** `src/__tests__/sets.test.ts` (33 cases) drives it directly: a piece in each of
+**Unit-test evidence for the toggles.** `src/__tests__/sets.test.ts` (33 cases) drives it
+directly: a piece in each of
 the five categories, then `test.each(SET_VISIBILITY_KEYS)` hides one category at a time and
 asserts the other four groups stay visible *and* that no mesh inside any group ever carries
 its own `visible: false` — the category-only rule, asserted rather than assumed. Also
@@ -1909,12 +1909,50 @@ covered: empty `sets` → five empty groups and zero geometry; a scene missing b
 entirely; `depth: 0` → a 1 mm plane with finite bounds; a whole scene of `{0, NaN, -1}`
 dimensions building without NaN; base-anchoring and degree-rotation; the every-`.myo`-on-disk
 manifest test (iterates `scenes/`, so a file added later is covered without editing the test).
-**Not verified: what any of this looks like on screen.** The renderer path is one line and
-the geometry is asserted, but nobody has seen a wall in the viewport yet — worth a look
-before this is called finished.
+
+**Screenshotted in the running app** (`npm run dev`, headless Chromium + WebGL via
+SwiftShader, driven with Playwright from a scratch directory — nothing added to the
+project's dependencies). A temporary 8-piece scene (3 walls, floor, ceiling, an open door,
+two windows) was POSTed through the real `/api/scenes` route, loaded through the UI, and the
+categories toggled by clicking their labels:
+
+- `docs/set-pieces-room.png` — eye level, ceiling off. Room reads as a room: back wall with
+  two window panels, side walls in different greys (`brick` / `concrete` / `plaster` all
+  land on distinct cool steps), floor, two figures inside it.
+- `docs/set-pieces-plan-view.png` — near plan view, ceiling off. The **open door leaf is
+  visibly swung on its hinge**, which is the whole reason `state` renders at all.
+- `docs/set-pieces-walls-hidden.png` — same angle, walls unchecked. Floor, door and both
+  windows stay exactly where they were; only the walls vanish. This is the category-only
+  rule with nothing else moving.
+
+Both the `Ceilings` and `Walls` checkboxes and the `Hide all sets` button were exercised in
+the same session; the panel's counts (`Walls (3)`, `Windows (2)`, …) come out right. The
+temporary `.myo` was deleted afterwards — `scenes/` is back to its eight files.
+
+**Two things the screenshots settled that the tests could not.** With the ceiling *on*, the
+default free-view camera (4, 3.5, 6) sits inside the box looking at the underside of a
+ceiling slab — the first frame is nearly black. That is not a bug, it is what a ceiling
+does, and it is the clearest possible argument for why category toggles had to ship in the
+same change rather than later. Second: the figures in that old scene render as capsules
+because *that scene* stores primitive meshes (it predates the pose library) — not a
+regression in the pose pipeline. Checked before believing it.
 
 **Gates, in order, all green:** `npx tsc --noEmit` clean · `npm run test:ci` 151 passed,
 10 suites · `CI=true npm run build` compiled successfully.
+
+**Gotcha — `npm run dev` dies instantly in a web session.** CRA's dev server exits with
+`options.allowedHosts[0] should be a non-empty string`, which reads like a webpack config
+bug and is not one: the container exports `HOST` as an *empty string*, and CRA passes it
+straight into `allowedHosts`. `HOST=localhost npm start` fixes it. Nothing in the repo needs
+changing — do not "fix" this by editing config.
+
+**Gotcha — Playwright's npm package and the container's Chromium disagree.** The
+preinstalled browser is build 1194; a fresh `npm i playwright` wants 1234 and tells you to
+run `npx playwright install`, which the environment forbids. Pass
+`executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'` instead. WebGL needs
+`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`; with those, the
+viewport renders for real (GL renderer reports `WebKit WebGL`, canvas 958×698). Wait on
+`requestAnimationFrame` ticks, not `waitForTimeout`, before screenshotting.
 
 **Gotcha for the next person:** `node_modules/` was not installed in this container and
 `npx tsc` silently resolved a *global* TypeScript 6.0.2, which failed on
