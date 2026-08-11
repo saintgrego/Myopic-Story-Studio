@@ -2063,3 +2063,80 @@ parameter.
 Properties column, which no longer exists. The new set covers the case the accordion has to
 get right: **Sets open with Hierarchy collapsed**, where the left column must widen for Sets
 alone rather than staying a 36 px rail.
+
+## 11 August 2026 — day summary
+
+Set pieces shipped (PRD §11 v1.9), and the day's real lesson had nothing to do with them.
+Four PRs merged; `main` at `4a27f0d`. Detail is in the sections above — this is the index
+and the scorecard.
+
+| # | what | section |
+| --- | --- | --- |
+| [#25](https://github.com/saintgrego/myopic-studio/pull/25) | Set pieces: schema, viewport groups, panel | *Set pieces … built* |
+| [#26](https://github.com/saintgrego/myopic-studio/pull/26) | Adopted `set-pieces`' materialRef vocabulary and panel placement | *Set pieces, second pass* |
+| [#27](https://github.com/saintgrego/myopic-studio/pull/27) / [#24](https://github.com/saintgrego/myopic-studio/pull/24) | Camera aim by shot type — **the same commit merged twice** | *Camera aim height* |
+| [#28](https://github.com/saintgrego/myopic-studio/pull/28) | CLAUDE.md: remote branch deletion is blocked in web sessions | — |
+
+Closed unmerged: [#23](https://github.com/saintgrego/myopic-studio/pull/23) (the original
+set-pieces PR, superseded) and the duplicate half of the camera-aim pair.
+
+**Where set pieces ended up:** `sets` + `setVisibility` on `SceneFile`, five category groups
+in the viewport, an accordion panel sharing the left column with Hierarchy, `materialRef`
+naming a cool-ramp position, and every pre-v1.9 `.myo` loading unchanged with no file
+rewritten. 154 tests, all three gates green.
+
+### The thing that actually went wrong
+
+**Two of the four PRs rebuilt work that already existed in this repo, and both were
+avoidable by reading.** v1.9 had already been implemented on `origin/set-pieces` (PR #23,
+open, 9 August), carrying the PRD amendment text and the `Transform` type that #25's brief
+referred to. #25 read the brief's references to both as *gaps in the brief*, wrote its own
+amendment, introduced its own `Transform`, and reported to the owner that neither existed —
+a claim that was true only of `main`. Then #27 cherry-picked `ac1b99f` onto `main` without
+noticing PR #24 was already open for exactly that commit; both merged, and #24's squash
+landed as an empty commit.
+
+The branch list was on screen before #25 was opened. It was read as names, not as work.
+
+- **`git ls-remote` is not the check. The open PR list is.** A branch tells you code exists;
+  an open PR tells you someone already decided what it should be, argued for it in prose, and
+  is waiting on a response. `#25` would have been a review instead of a rewrite.
+- **A brief that references something you cannot find is evidence you are looking in the
+  wrong place** — not evidence the reference is wrong. Two references, both "missing", both
+  present one branch over, and the pattern still read as a defective brief.
+- **The duplicate was not free even though it merged green.** It produced a competing v1.9
+  amendment in `PRD.md`, a second `materialRef` vocabulary that would have rendered saved
+  scenes differently, and an empty commit in `main`'s history. #26 exists only to undo the
+  first two.
+- **State before commenting.** The "closing as a duplicate" comment on #27 was posted without
+  re-reading its state; it had already merged, so the comment had the direction of the
+  duplication backwards and had to be corrected in place.
+
+### What the second pass changed, and why it was right
+
+The owner's call, after the two implementations were compared side by side: take
+`origin/set-pieces`' `materialRef` vocabulary (`cool-0` … `cool-4` with index-cycling)
+over #25's semantic surfaces, and its accordion panel over #25's selection-driven one.
+Both are argued in the *second pass* section. The general shape: **a name that promises
+something the renderer is not allowed to deliver is worse than a name that describes what
+it actually selects**, and a fixed fallback that merges neighbours into one silhouette is
+worse than one that cycles.
+
+### Container gotchas, all three cost real time
+
+- **`npm run dev` dies instantly** with `options.allowedHosts[0] should be a non-empty
+  string` — the container exports `HOST` as an empty string and CRA passes it straight
+  through. `HOST=localhost npm start`. Nothing in the repo needs changing.
+- **`npx tsc` resolved a global TypeScript 6.0.2** because `node_modules/` was not installed,
+  and failed on `moduleResolution: node10` — which looks exactly like a real tsconfig
+  problem. Confirm `npx tsc --version` says **4.9.5** before believing the typechecker.
+- **Remote branch deletion 403s** and `git push` then exits `0` printing "Everything
+  up-to-date". Now documented in `CLAUDE.md` (#28).
+
+### The one thing worth carrying forward
+
+Yesterday's lesson was *fallbacks that return plausible values cost more than every other
+class of bug*. Today's is the same shape one level up: **a plausible-looking absence is as
+expensive as a plausible-looking value.** `main` not containing the amendment looked exactly
+like the amendment not existing. The check that distinguishes them — look wider before
+concluding something is missing — costs thirty seconds and was skipped twice.
