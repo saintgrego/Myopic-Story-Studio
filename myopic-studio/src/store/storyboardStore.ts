@@ -42,7 +42,11 @@ export const useStoryboardStore = create<StoryboardStore>((set, get) => ({
 
   moveFrame: async (fromIndex, toIndex) => {
     const frames = [...get().frames];
+    // Both ends need the bounds check: an out-of-range fromIndex makes splice return
+    // [] and reinserts undefined, and storyboard edits persist with no save gate, so
+    // that hole reaches storyboard.json immediately.
     if (toIndex < 0 || toIndex >= frames.length) return;
+    if (fromIndex < 0 || fromIndex >= frames.length) return;
     const [moved] = frames.splice(fromIndex, 1);
     frames.splice(toIndex, 0, moved);
     set({ frames });

@@ -2140,3 +2140,82 @@ class of bug*. Today's is the same shape one level up: **a plausible-looking abs
 expensive as a plausible-looking value.** `main` not containing the amendment looked exactly
 like the amendment not existing. The check that distinguishes them — look wider before
 concluding something is missing — costs thirty seconds and was skipped twice.
+
+---
+
+## Server route tests + the moveFrame hole (2026-08-12): 55 new tests, two defects fixed
+
+A coverage read of the repo found the split is bimodal by design and healthy where the
+"extract the pure logic out of Viewport" strategy has been applied — `dof.ts`, `framing.ts`,
+`lighting.ts`, `sets.ts`, `palette.ts` and `sceneStore` are at or near 100% — and empty
+everywhere data actually moves. `server/index.js` had **no tests at all** and was not even in
+the coverage report (`collectCoverageFrom` only sees `src/`); `storyboardStore.ts` was at 0%
+despite being the one store that writes to disk on every action with no save gate.
+
+Writing tests against both turned up two real defects, both now fixed and both
+negative-controlled (verified failing against the pre-fix code, not merely passing after it).
+
+### The two defects
+
+- **`POST /api/scenes` never validated the sceneId it turned into a filename.** The read
+  route has always guarded `:filename` with `SAFE_FILENAME`; the write route interpolated
+  `` `${scene.sceneId}.myo` `` straight into `path.join`. A sceneId of `../../../../tmp/pwned`
+  resolves outside `SCENES_DIR`. Parser-issued ids are `randomUUID()` so nothing in the app
+  produced this, but the asymmetry was one line wide. Same regex, now applied on both sides.
+- **`GET /api/scenes` threw the whole listing away on one bad file.** `JSON.parse` inside a
+  `readdirSync().map()` with no try/catch. `scenes/` is hand-editable user data in the working
+  tree, so a single malformed `.myo` — or a directory that happens to end in `.myo` — made
+  every *other* saved scene unreachable from the load dropdown. Now per-file: a file that
+  won't parse leaves itself out of the list.
+- **`storyboardStore.moveFrame` bounds-checked only `toIndex`.** An out-of-range `fromIndex`
+  makes `splice` return `[]`, so `const [moved] = …` is `undefined` and gets spliced back in.
+  Because storyboard edits persist immediately, that hole went straight to `storyboard.json`
+  as a `null` frame. Both ends are checked now.
+
+### Rules worth remembering
+
+- **A test that writes through the app's own routes must not write through them into the
+  user's data.** `scenes/` and `storyboard.json` are working-tree files. `server/index.js`
+  now reads `MYOPIC_SCENES_DIR` / `MYOPIC_STORYBOARD_PATH`, defaulting to the real paths, and
+  the route suite points both at an `fs.mkdtempSync` dir. Both are resolved once at module
+  load, so the env vars must be set *before* `require('../../server/index')` — which is why
+  that file uses `require` at a specific point rather than a hoisted `import`.
+- **`server/index.js` only calls `app.listen` under `require.main === module`, and exports
+  `{ app }`.** Requiring it for a test must not open a socket on :4000.
+- **Server route tests run under `@jest-environment node`,** set per-file via docblock. Not
+  just tidiness: supertest's dependency chain (`superagent` → `formidable` → `cuid2` →
+  `@noble/hashes`) reaches for `TextEncoder`, which Jest 27's jsdom does not expose — the same
+  generation gap `setupTests.ts` already patches for `structuredClone` and `TextDecoder`. The
+  failure surfaces as `ReferenceError: TextEncoder is not defined` at the *import* line.
+- **`crypto.randomUUID` is also missing from Jest 27's jsdom.** `storyboardStore.addFrame`
+  mints frame ids with it; the suite stubs it in `beforeEach` rather than adding a fourth
+  global to `setupTests.ts`, since only this one suite needs it.
+- **`supertest` + `@types/supertest` are new devDeps.** They pull nothing into the browser
+  bundle and `npm run build` is unchanged; the CRA toolchain pins were not touched.
+
+### Evidence
+
+- 209 tests / 12 suites, up from 154 / 10. All three gates green: `./node_modules/.bin/tsc
+  --noEmit`, `npm run test:ci`, `CI=true npm run build`.
+- Negative control, server routes: reverting `server/index.js` to the pre-fix logic fails
+  exactly the 7 tests that pin the two defects, and passes the other 28.
+- Negative control, moveFrame: reverting the `fromIndex` guard fails exactly the 3
+  out-of-range-move tests, and passes the other 17.
+- `MYOPIC_SERVER_PORT=4011 node server/index.js` still binds and serves the real `scenes/`
+  and `storyboard.json` unchanged; `git status` clean for both after the full suite runs.
+
+### Still uncovered, in the order worth doing
+
+All seven components and `App.tsx` are at 0%, and there is **no component test
+infrastructure** — `@testing-library/react` and `user-event` are not in `devDependencies`.
+Adding them means touching the pinned CRA 5 / TS 4.9.5 toolchain (`@testing-library/react@14`
+is the React 18 + Jest 27 fit), so it is a separate decision, not a drive-by. Highest value
+once it is in: `fields.tsx` (the `[?]` flag rendering contract, a spec-level behaviour
+asserted nowhere in the UI), `PropertiesPanel`'s `MeshLibrarySelector` (the PRD §4 abstraction
+is tested only at the poses.json/props.json data level, never at the panel), and `App.tsx`'s
+`handleAddToStoryboard` (the one path that writes a scene without the user pressing Save).
+Also still untested: the three fetch wrappers (`lib/parser.ts`, `sceneApi.ts`,
+`storyboardApi.ts` — cheap, the `global.fetch` mock idiom already exists in `parser.test.ts`),
+and `Viewport.tsx`'s remaining extractable pure logic (`isExterior`'s `locationName` fallback,
+`buildObject`'s `mesh.kind` switch, and whether the palette is indexed by scene-array position
+rather than a filtered counter — the exact regression `palette.ts`'s own comment warns about).
