@@ -10,10 +10,14 @@ const { parsePromptToScene } = require('./parser');
 const app = express();
 app.use(express.json({ limit: '2mb' }));
 
-const SCENES_DIR = path.join(__dirname, '..', 'scenes');
+// Overridable so the route tests can point at a temp dir. The user's real scenes/
+// and storyboard.json are working-tree data (see CLAUDE.md) — a test must never
+// write into them. Unset in normal use, which keeps the paths exactly as before.
+const SCENES_DIR = process.env.MYOPIC_SCENES_DIR || path.join(__dirname, '..', 'scenes');
 fs.mkdirSync(SCENES_DIR, { recursive: true });
 
-const STORYBOARD_PATH = path.join(__dirname, '..', 'storyboard.json');
+const STORYBOARD_PATH =
+  process.env.MYOPIC_STORYBOARD_PATH || path.join(__dirname, '..', 'storyboard.json');
 
 const SAFE_FILENAME = /^[a-zA-Z0-9_-]+\.myo$/;
 
@@ -36,6 +40,12 @@ app.post('/api/scenes', (req, res) => {
     return res.status(400).json({ error: 'scene (with sceneId) is required' });
   }
   const filename = `${scene.sceneId}.myo`;
+  // The sceneId becomes a path segment, so it gets the same guard the read route
+  // applies to :filename — otherwise a sceneId of "../../etc" escapes SCENES_DIR.
+  // Parser-issued ids are randomUUID(), which always passes.
+  if (!SAFE_FILENAME.test(filename)) {
+    return res.status(400).json({ error: 'invalid sceneId' });
+  }
   const filePath = path.join(SCENES_DIR, filename);
   fs.writeFileSync(filePath, JSON.stringify(toMyoEnvelope(scene), null, 2), 'utf-8');
   res.json({ filename });
@@ -43,10 +53,22 @@ app.post('/api/scenes', (req, res) => {
 
 app.get('/api/scenes', (req, res) => {
   const files = fs.readdirSync(SCENES_DIR).filter((f) => f.endsWith('.myo'));
-  const scenes = files.map((filename) => {
-    const envelope = JSON.parse(fs.readFileSync(path.join(SCENES_DIR, filename), 'utf-8'));
-    return { filename, sceneId: envelope.scene_id, title: envelope.title, created: envelope.created };
-  });
+  const scenes = [];
+  for (const filename of files) {
+    // scenes/ is user data in the working tree and hand-editable, so one corrupt
+    // file skips itself rather than throwing the whole listing away.
+    try {
+      const envelope = JSON.parse(fs.readFileSync(path.join(SCENES_DIR, filename), 'utf-8'));
+      scenes.push({
+        filename,
+        sceneId: envelope.scene_id,
+        title: envelope.title,
+        created: envelope.created,
+      });
+    } catch {
+      // Unreadable or malformed — leave it out of the list.
+    }
+  }
   res.json({ scenes });
 });
 
@@ -82,4 +104,11 @@ app.put('/api/storyboard', (req, res) => {
 // The CRA proxy is hardcoded to :4000, and dev tooling injects PORT for the
 // frontend — so the backend uses its own variable to avoid stealing that port.
 const PORT = process.env.MYOPIC_SERVER_PORT || 4000;
-app.listen(PORT, () => console.log(`Myopic backend listening on :${PORT}`));
+
+// Only bind a port when run as a program (`npm run server`). Requiring this module —
+// which the route tests do, driving `app` through supertest — must not open a socket.
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`Myopic backend listening on :${PORT}`));
+}
+
+module.exports = { app };
