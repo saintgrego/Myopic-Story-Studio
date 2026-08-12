@@ -2219,3 +2219,37 @@ Also still untested: the three fetch wrappers (`lib/parser.ts`, `sceneApi.ts`,
 and `Viewport.tsx`'s remaining extractable pure logic (`isExterior`'s `locationName` fallback,
 `buildObject`'s `mesh.kind` switch, and whether the palette is indexed by scene-array position
 rather than a filtered counter — the exact regression `palette.ts`'s own comment warns about).
+
+---
+
+## Hair, wardrobe and more poses — exploration only (2026-08-12)
+
+Owner asked to explore options for more poses, reference figures with basic hairstyles, and
+simple wardrobe. Written up in `docs/proposal-hair-wardrobe-and-more-poses.md`. **Nothing was
+built and no amendment was logged** — the document is the analysis, per the precedent of
+`docs/proposal-realistic-figure-assets.md`.
+
+The findings worth having here rather than only in the proposal:
+
+- **The premise was stale.** The request assumed T-posed manikins; the library has been
+  authored figure geometry since v1.7/v1.8 (eight `.glb`s, 4.0 MB). The live gap is not
+  anatomy, it is that the two figures are visually identical in a two-shot — which is what
+  hair and clothing fix, as silhouette.
+- **Poses split cleanly in two.** `POSES` in `build-pose-glbs.py` exposes six angles, all
+  about world X, all applied symmetrically to `.L`/`.R`. So roughly six more postures
+  (kneeling, sitting-ground, leaning-back, arms-raised, head-down, slumped) are reachable by
+  adding table rows alone. Anything asymmetric or off-axis — walking, pointing, a turned head
+  — needs `rotate_x()` generalised to take an axis and per-side bone names. Neither needs an
+  amendment; v1.7's acceptance criteria already cover adding poses.
+- **The combinatorial limit is the parser, not the disk.** Treating hair and wardrobe as
+  library axes gives 4×2×3×3 = 180 rows in `poses.json`, and `server/parser.js` asks the model
+  to pick one row by hint. 1-of-180 with near-identical hints fails as a plausible wrong pick,
+  which no `[?]` sentinel catches. That, not the ~90 MB, is what rules flat axis-expansion out
+  and forces the choice between a bounded flat casting set (no code change) and composed mesh
+  refs (a PRD §4 change).
+- **Name library rows by silhouette, not gender** (`hair-short`, not `hair-male`) — same
+  reasoning v1.8 recorded for choosing "default" over "male", and paths are permanent once a
+  `.myo` references them.
+- **Nothing in any of the three tracks is buildable from a web session.** Blender is absent
+  from the agent container and the source bundle is gitignored, so no `.glb` can be produced
+  or seen in the viewport here. Pipeline code can be written for review; it cannot be run.
