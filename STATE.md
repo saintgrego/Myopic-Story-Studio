@@ -2334,3 +2334,65 @@ and the wardrobe half is **blocked on an asset-source decision** — v1.7's Make
 fallback, now the live path, and section 9's asset question reopening for wardrobe (v1.7
 closed it for bodies only). The roster cap, the naming rule, and the mesh-is-the-figure
 decision are untouched by any of this.
+
+---
+
+## Garment deform spike + pipeline garment support (2026-08-13): BUILT, verified end to end
+
+**Follow-on from the derived-garment failure above.** Owner chose option 2: hand-author
+garments on the existing CC0 bodies rather than adopt MakeHuman/MPFB2. The rejection was on
+**fit, not licence** — MPFB2 clothing is authored against its own base mesh and fitted
+through its proxy system, so it would need refitting onto Blender Studio bodies (a gentler
+version of the problem that just failed), or a whole-pipeline switch that re-exports all
+eight figures. With the roster capped at six, that is a system's worth of machinery for
+about four coats.
+
+**The question that had to be answered first**, since it decides whether hand-authoring is
+worth anything: does a separate garment mesh bound to the same rig deform **with** the body?
+If not, each garment needs re-modelling per pose — four per figure. `spike-garment-deform.py`
+answered it: **yes.** A placeholder tube spanning the hip and both thighs (the hardest case —
+seated, the thighs swing 90° and pull one tube two ways) followed the pose correctly.
+
+- **The spike execs the real pipeline's source with its trailing `main()` stripped**, rather
+  than copying `measure`/`build_armature`/`apply_pose` into itself. Copies would prove the
+  copies work and leave the pipeline untested.
+- **Verify a seated pose in PROFILE.** The first deform render was head-on and read as a
+  standing figure: thighs swinging toward the lens foreshorten to nothing. `spike-render.py`
+  gained `--side` for this. The bbox agreed with the profile view — seated output matched
+  the committed `sitting.glb` height exactly (1.4054) and extended 0.20 further forward,
+  which is the garment on the thighs.
+
+**Pipeline changes, all in `build-pose-glbs.py`:**
+
+- `bake_and_export()` takes a **list** of meshes and grounds/centres them **as one group**.
+  Grounding each separately would drop a hem to the floor independently of the feet and
+  shear the figure apart. X-centring measures the **body** (first entry), not the group — a
+  garment need not be symmetric, and a scene's `position.x` refers to the figure.
+- The pieces are **joined before export**: two objects would take two palette colours and
+  read as a collage rather than a person (§11 v1.5 assigns per object).
+- `load_figure()` now returns its plan-centring **shift**, and `load_garments()` applies the
+  same shift. Garments are authored where the body sits in the bundle (x ≈ −2.26), so
+  without this a coat lands 2.26 m to the side of its figure.
+- `GARMENT_FIGURES` (suffix → body + garment objects) ships **empty**; `build:poses` passes
+  `${GARMENTS:-assets-src/garments.blend}`, unread until the table has rows.
+
+**End-to-end verification, because an unrun code path is not done.** `spike-pipeline-smoke.py`
+builds a stand-in bundle from the committed pose library (renamed to the bundle's object
+names and **parked at x ≈ −2.26 like the real one**, which is what makes the shift testable)
+plus a placeholder garment blend, then runs the real `main()` with the roster injected.
+Twelve `.glb`s: eight bare, four clothed, all grounded.
+
+- **Regression on bare figures: bit-identical bounds to the committed library** for both
+  `standing` and `standing-female`, so the list refactor changed nothing for existing output.
+- Clothed variants differ from bare only in depth extent — `sitting-coat` z-max 0.727 vs
+  `sitting` 0.481 — which is the garment lying on the thighs, as it should.
+
+**Authoring constraints found by running it**, now written into `assets-src/README.md`:
+hems must stop at the ankle (group grounding lifts the whole figure to satisfy `min.z = 0`,
+leaving the feet hovering); leave clearance at the hands, which hang at hip height and clip
+through anything there; and **a static garment does not drape** — it deforms with its bones
+and nothing else, so a coat stays tubular in `lying`. Check all four poses, not just
+`standing`.
+
+**Still not done:** the garments. `GARMENT_FIGURES` stays empty and the library keeps its
+eight rows until they are modelled. The hair half of v1.10 is unblocked.

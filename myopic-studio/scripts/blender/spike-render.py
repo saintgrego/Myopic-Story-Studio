@@ -27,9 +27,11 @@ SPACING = 0.95
 
 def args():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
+    side = '--side' in argv
+    argv = [a for a in argv if a != '--side']
     if len(argv) < 2:
-        raise SystemExit('usage: ... -- <out.png> <a.glb> [b.glb ...]')
-    return argv[0], argv[1:]
+        raise SystemExit('usage: ... -- [--side] <out.png> <a.glb> [b.glb ...]')
+    return argv[0], argv[1:], side
 
 
 def flat(name, rgb):
@@ -48,7 +50,7 @@ def flat(name, rgb):
 
 
 def main():
-    out, files = args()
+    out, files, side = args()
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
     n = len(files)
@@ -80,10 +82,21 @@ def main():
     fill.rotation_euler = (radians(65), 0, radians(60))
 
     # 35 mm, eye height, far enough back to hold the whole group — the app's default lens.
-    bpy.ops.object.camera_add(location=(0, -(3.0 + 0.8 * n), 1.15))
-    cam = bpy.context.active_object
+    #
+    # --side puts the camera on the figures' left. A seated figure is unmistakable in
+    # profile and ambiguous head-on: thighs that swing toward the lens foreshorten to
+    # nothing, so a front view of a sitting pose can read as standing. The first deform
+    # render was exactly that trap.
+    dist = 3.0 + 0.8 * n
+    if side:
+        bpy.ops.object.camera_add(location=(dist, 0, 1.15))
+        cam = bpy.context.active_object
+        cam.rotation_euler = (radians(88), 0, radians(90))
+    else:
+        bpy.ops.object.camera_add(location=(0, -dist, 1.15))
+        cam = bpy.context.active_object
+        cam.rotation_euler = (radians(88), 0, 0)
     cam.data.lens = 35
-    cam.rotation_euler = (radians(88), 0, 0)
     bpy.context.scene.camera = cam
 
     scene = bpy.context.scene

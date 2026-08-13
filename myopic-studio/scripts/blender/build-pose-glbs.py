@@ -49,6 +49,24 @@ FIGURES = {
     '-female': 'GEO-body_female_realistic',
 }
 
+# Clothed figures (PRD §11 v1.10): suffix → (body object, garment objects to bind).
+#
+# EMPTY UNTIL THE GARMENTS ARE MODELLED, and that is the whole state of v1.10's wardrobe
+# half — the mechanism below is built and proven, the assets do not exist yet. A garment is
+# hand-authored in Blender ON one of the bodies above, in that body's own coordinates, and
+# saved into a garment .blend passed as the third argument. Adding a clothed figure is then
+# a row here plus a row in src/poses.json, exactly like adding a pose.
+#
+# WHY HAND-AUTHORED AND NOT DERIVED: deriving garments from the body was tried, rendered,
+# and failed — see STATE.md, "Derived-garment spike". A ring knows only distance from a
+# vertical axis, and a standing figure is not radial.
+#
+# THE ROSTER IS CAPPED AT SIX FIGURES TOTAL, including the two above (PRD §11 v1.10). The
+# library is poses × figures, so each row here costs four .glb files.
+GARMENT_FIGURES = {
+    # '-coat': ('GEO-body_male_realistic', ('GARMENT-coat_long',)),
+}
+
 # Reused verbatim from the placeholder generator's POSES table, whose angles were
 # validated in the viewport over several milestones. The joint set below is the same one
 # the primitive mannequin articulated, which is why the numbers transfer: this is a
@@ -65,9 +83,10 @@ POSES = {
 
 def args():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
-    if len(argv) != 2:
-        raise SystemExit('usage: ... --python build-pose-glbs.py -- <bundle.blend> <out-dir>')
-    return argv[0], argv[1].rstrip('/')
+    if len(argv) not in (2, 3):
+        raise SystemExit('usage: ... --python build-pose-glbs.py -- '
+                         '<bundle.blend> <out-dir> [garments.blend]')
+    return argv[0], argv[1].rstrip('/'), (argv[2] if len(argv) == 3 else None)
 
 
 # ---------------------------------------------------------------- measurement
@@ -294,42 +313,67 @@ def apply_pose(rig, pose):
 # ---------------------------------------------------------------- export
 
 
-def bake_and_export(obj, rig, pose, path):
-    """Freeze the posed mesh into static geometry, ground it, write the .glb."""
-    baked = obj.copy()
-    baked.data = obj.data.copy()
-    bpy.context.collection.objects.link(baked)
+def bake_and_export(objs, rig, pose, path):
+    """Freeze the posed meshes into static geometry, ground them, write one .glb.
+
+    Takes a LIST because a figure may be a body plus hand-authored garments (PRD §11
+    v1.10). Each is bound to the same rig and each carries its own Armature modifier, so
+    each bakes the same way; what they must not do is bake independently in space.
+    """
+    baked = []
+    for obj in objs:
+        b = obj.copy()
+        b.data = obj.data.copy()
+        bpy.context.collection.objects.link(b)
+
+        bpy.ops.object.select_all(action='DESELECT')
+        b.select_set(True)
+        bpy.context.view_layer.objects.active = b
+        for mod in list(b.modifiers):
+            # Applying the Armature modifier writes the pose into the vertices; the rig is
+            # then dead weight and is never exported. MULTIRES goes too — the base cage is
+            # ~10.5k quads, which is blocking-appropriate, and sculpt levels are not.
+            if mod.type == 'MULTIRES':
+                b.modifiers.remove(mod)
+            else:
+                bpy.ops.object.modifier_apply(modifier=mod.name)
+        b.parent = None
+        b.matrix_world = obj.matrix_world
+
+        # Whole-figure orientation (lying), about the world x axis, around the origin.
+        if pose.get('rootRotX'):
+            b.matrix_world = Matrix.Rotation(pose['rootRotX'], 4, 'X') @ b.matrix_world
+        baked.append(b)
+
+    # GROUND AND CENTRE THE GROUP, NOT EACH PIECE. Grounding a coat separately would drop
+    # its hem to the floor independently of the feet and shear the figure apart; centring
+    # separately would slide it sideways off the body. One offset, applied to everything.
+    #
+    # Base-anchored, derived: PRD §11 v1.7's first output convention. Note the consequence
+    # for garment authoring — a hem modelled below the soles lifts the whole figure off the
+    # floor to satisfy min.z = 0, and the feet then hover. Hems stop at the ankle.
+    bpy.context.view_layer.update()
+    lo = min(min((b.matrix_world @ v.co).z for v in b.data.vertices) for b in baked)
+    # Centre on the origin in plan, so position.x/z in a scene mean what they say. Measured
+    # on the BODY (the first entry) rather than the group: a garment is not always
+    # symmetric, and the figure is what a scene position refers to.
+    bpy.context.view_layer.update()
+    xs = [(baked[0].matrix_world @ v.co).x for v in baked[0].data.vertices]
+    dx = (min(xs) + max(xs)) / 2
+    for b in baked:
+        b.location.z -= lo
+        b.location.x -= dx
 
     bpy.ops.object.select_all(action='DESELECT')
-    baked.select_set(True)
-    bpy.context.view_layer.objects.active = baked
-    for mod in list(baked.modifiers):
-        # Applying the Armature modifier writes the pose into the vertices; the rig is
-        # then dead weight and is never exported. MULTIRES goes too — the base cage is
-        # ~10.5k quads, which is blocking-appropriate, and sculpt levels are not.
-        if mod.type == 'MULTIRES':
-            baked.modifiers.remove(mod)
-        else:
-            bpy.ops.object.modifier_apply(modifier=mod.name)
-    baked.parent = None
-    baked.matrix_world = obj.matrix_world
-
-    # Whole-figure orientation (lying), about the world x axis, around the origin.
-    if pose.get('rootRotX'):
-        baked.matrix_world = Matrix.Rotation(pose['rootRotX'], 4, 'X') @ baked.matrix_world
-
-    # Base-anchored, derived: PRD §11 v1.7's first output convention.
-    bpy.context.view_layer.update()
-    lo = min((baked.matrix_world @ v.co).z for v in baked.data.vertices)
-    baked.location.z -= lo
-    # Centre on the origin in plan, so position.x/z in a scene mean what they say.
-    bpy.context.view_layer.update()
-    xs = [(baked.matrix_world @ v.co).x for v in baked.data.vertices]
-    baked.location.x -= (min(xs) + max(xs)) / 2
-
-    bpy.ops.object.select_all(action='DESELECT')
-    baked.select_set(True)
-    bpy.context.view_layer.objects.active = baked
+    for b in baked:
+        b.select_set(True)
+    bpy.context.view_layer.objects.active = baked[0]
+    if len(baked) > 1:
+        # One object, so the app's palette re-material applies one colour to the figure.
+        # A body and a coat arriving as two objects would take two materials and read as a
+        # collage rather than a person (PRD §11 v1.5 assigns per object).
+        bpy.ops.object.join()
+    baked = bpy.context.active_object
 
     # Normalise shading before export, for two reasons that happen to have one fix.
     #
@@ -392,27 +436,74 @@ def load_figure(blend, body):
     verts = world_verts(obj)
     mid_x = (min(v.x for v in verts) + max(v.x for v in verts)) / 2
     mid_y = (min(v.y for v in verts) + max(v.y for v in verts)) / 2
-    obj.location -= Vector((mid_x, mid_y, 0))
+    shift = Vector((-mid_x, -mid_y, 0))
+    obj.location += shift
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-    return obj
+    # The shift is returned because garments are authored against the body's position in
+    # the source bundle and have to travel with it. Baking it into the body and not the
+    # coat would leave the coat standing where the figure used to be.
+    return obj, shift
+
+
+def load_garments(blend, names, shift):
+    """Link hand-authored garment meshes into the current scene, aligned to the body.
+
+    The contract, and the reason there is no fitting step here: a garment is MODELLED ON
+    the base mesh it belongs to, in the base mesh's own coordinates. That is what option 2
+    of PRD §11 v1.10 buys — no proxy system, no shrinkwrap, no per-pose refitting — and it
+    is only true if the author models against the same body the pipeline poses.
+    """
+    if not names:
+        return []
+    out = []
+    with bpy.data.libraries.load(blend) as (src, dst):
+        missing = [n for n in names if n not in src.objects]
+        if missing:
+            raise SystemExit(f'\nGarment blend {blend} has no object(s): {", ".join(missing)}\n'
+                             f'It holds: {", ".join(sorted(src.objects))}\n')
+        dst.objects = list(names)
+    for obj in dst.objects:
+        bpy.context.collection.objects.link(obj)
+        bpy.ops.object.select_all(action='DESELECT')
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        obj.location += shift
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        out.append(obj)
+    return out
 
 
 def main():
-    blend, out = args()
+    blend, out, garment_blend = args()
     require(blend)
 
-    for suffix, body in FIGURES.items():
-        obj = load_figure(blend, body)
+    # Bare figures first, then clothed ones. Both go through the same path: the only
+    # difference is how many meshes are bound to the rig before the poses are applied.
+    jobs = [(suffix, body, ()) for suffix, body in FIGURES.items()]
+    jobs += [(suffix, body, garments) for suffix, (body, garments) in GARMENT_FIGURES.items()]
+
+    for suffix, body, garments in jobs:
+        if garments and not garment_blend:
+            raise SystemExit(f'\nFigure "{suffix}" needs garments {list(garments)} but no '
+                             'garment .blend was given.\n'
+                             'Pass it as the third argument. See assets-src/README.md.\n')
+        obj, shift = load_figure(blend, body)
         m = measure(obj)
         print(f'LANDMARKS[{body}] ' + '  '.join(f'{k}={v:.3f}' for k, v in m.items()))
 
         rig = build_armature(obj, m)
-        bind(obj, rig)
+        pieces = [obj] + load_garments(garment_blend, garments, shift)
+        # Every piece binds to the same rig with the same automatic weighting. Proven on a
+        # placeholder garment through a seated pose before this path was written — see
+        # STATE.md, "Garment deform spike".
+        for piece in pieces:
+            bind(piece, rig)
 
         for name, pose in POSES.items():
             apply_pose(rig, pose)
             bpy.context.view_layer.update()
-            bake_and_export(obj, rig, pose, f'{out}/{name}{suffix}.glb')
+            bake_and_export(pieces, rig, pose, f'{out}/{name}{suffix}.glb')
             print(f'wrote {out}/{name}{suffix}.glb')
 
 
