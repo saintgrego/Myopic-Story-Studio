@@ -71,6 +71,17 @@ Every character/prop holds a `mesh` reference: `{kind:'primitive', shape, dimens
 - Prop meshes prefer a **library proxy** from `src/props.json` and fall back to a primitive when nothing fits (PRD §11 v1.4). The parser must never invent a glTF path outside the library.
 - Old `.myo` files may lack `environment.setting` — `isExterior()` in Viewport.tsx falls back to sniffing `locationName`. No migration; keep the fallback.
 
+### Layout invariant: components are sized by their container, never by themselves
+
+**All layout dimensions live in `App.tsx`'s grid template. No component sets its own width or height.** As of 13 Aug 2026 this holds exactly: every fixed `[...]` value in `src/components/` is a *font* size (`text-[10px]`, `text-[11px]`), and the only layout dimensions in the app are `App.tsx`'s `grid-cols-[240px,1fr,320px]` (plus its three collapsed variants) and `h-[70vh]` on the same element. There are **zero** responsive prefixes (`sm:`/`md:`/`lg:`) anywhere, deliberately — the app is desktop-only today.
+
+Keep it that way when adding UI. A new panel takes its size from the grid cell it is placed in; if you find yourself writing `w-[280px]` inside a component, put the width in the grid template instead. The point is not tidiness:
+
+- **It keeps a mobile/responsive retrofit a one-file job.** The usual reason responsive work gets expensive is hard-coded widths scattered across components, which breakpoints then have to chase into every file. That cost is currently zero here and does not grow with panel count — but only while this invariant holds.
+- **The collapse machinery already exists** and is the hard half of a mobile layout: `leftOpen`/`propertiesOpen` already drive the grid down to `[36px,1fr,36px]`. A mobile treatment is mostly changing what "collapsed" *renders as* (a sheet rather than a rail) plus breakpoint defaults.
+
+Not yet decided, and it changes the design when it is: whether mobile is **review-only** (orbit the viewport, flip storyboard frames — close to what the collapse state already gives) or **editing** (`PropertiesPanel` and `fields.tsx` need sheets, steppers and bigger hit targets — a redesign, not a breakpoint). Note also that responsive layout alone only buys a *second screen*: the backend writes `.myo` files through real fs access and CRA proxies `/api/*` to `localhost:4000`, so a phone needs the user's desktop running on the same network. Untethered mobile use means hosting and storage, which is PRD §2 non-goal #4 ("single-user, local, filesystem-only") and needs an amendment, not a CSS change.
+
 ### Rendering scope is governed, not open
 
 PRD §11's test: a viewport feature is in scope if it answers a *blocking* question (shadow direction, horizon, distance), out if it answers a *finishing* question (looks real/good). Shadows, sky dome, ACES tone mapping, and fog are in and built. Ray tracing, PBR/texture maps, reflections, bloom, AO, and rendered DoF are **out** — building one requires logging a PRD §11 amendment first. Load-bearing rendering details (all in Viewport.tsx, all with reasons in STATE.md):
