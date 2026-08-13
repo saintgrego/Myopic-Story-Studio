@@ -55,18 +55,63 @@ FIGURES = {
 # better figure in the same poses, not a re-posing exercise.
 #
 # Angles are radians, positive = the direction named. rootRotX lays the whole figure down.
+#
+# SIGN CONVENTION, since it is not guessable and every new pose needs it. Rotations are
+# about the world x axis and the figure faces -y, so for a limb that HANGS DOWNWARD at rest
+# a negative angle swings it forward, toward the face, and a positive angle swings it back.
+# For the spine and head, which point upward at rest, the sense inverts: a POSITIVE
+# `torsoBend`/`headTilt` leans forward. `sitting` is the worked example — its thighs come
+# forward on -pi/2 and its shins drop back down on +pi/2.
+#
+# Every entry is symmetric: `apply_pose` writes each named angle to both .L and .R.
+# Asymmetric posture (walking, pointing, a hand on one hip) and anything off the x axis
+# (arms out to the side, a turned head) cannot be expressed here and needs the
+# generalisation described in docs/proposal-hair-wardrobe-and-more-poses.md, track 1b.
+#
+# ARM ANGLES ARE BOUNDED BY THE BIND, NOT BY TASTE. Nothing here raises an arm much past
+# half a radian, and that is a hard limit rather than a stylistic choice: automatic
+# (bone-heat) weighting hands the arm bones a band of hip, outer thigh and flank — measured,
+# 2,300 vertices — because the hands rest against the thighs in the source mesh's rest
+# pose. Raise an arm and that band follows it, dragging a curtain of triangles behind it.
+# The four original poses keep their arms low and never expose it. See STATE.md
+# "Pose library, second batch" before adding a pose that lifts an arm.
 POSES = {
     'standing': {},
     'sitting': {'thighForward': -pi / 2, 'kneeBend': pi / 2, 'armForward': -0.5, 'elbowBend': -0.4},
     'crouching': {'thighForward': -1.6, 'kneeBend': 2.0, 'torsoBend': 0.55, 'armForward': -1.0, 'elbowBend': -0.5},
     'lying': {'rootRotX': -pi / 2},
+
+    # --- added 12 August 2026. Five postures within the symmetric, x-axis, arms-low
+    # envelope the bind supports, each chosen for a blocking question the first four
+    # cannot answer.
+
+    # Upright on both knees: thighs stay vertical, shins fold back to horizontal. The knees
+    # become the lowest point and the grounding pass rests the figure on them.
+    'kneeling': {'kneeBend': pi / 2, 'armForward': -0.15},
+    # On the floor with the legs straight out front — thighs forward like `sitting`, but the
+    # knees never bend, so the whole leg lies along the floor.
+    'sitting-ground': {'thighForward': -pi / 2, 'kneeBend': 0.0, 'armForward': -0.2, 'elbowBend': -0.3},
+    # Weight back against something out of frame — a wall, a bar, a desk edge. Feet stay
+    # planted; the lean is all spine, with the chin following it up.
+    'leaning-back': {'torsoBend': -0.35, 'headTilt': -0.2, 'armForward': 0.15},
+    # Eyeline down, hands up to meet it: reading, a phone, a map. The head angle is the
+    # whole point — where a character is looking is blocking, not decoration.
+    'head-down': {'headTilt': 0.5, 'armForward': -0.35, 'elbowBend': -0.5},
+    # Exhausted, defeated, hanging on. Deliberately distinct from `crouching`, which is a
+    # deep functional knee bend: here the legs stay nearly straight and the collapse is in
+    # the spine and neck.
+    'slumped': {'torsoBend': 0.7, 'headTilt': 0.4, 'thighForward': -0.2, 'kneeBend': 0.35,
+                'armForward': 0.1},
 }
 
 
 def args():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     if len(argv) != 2:
-        raise SystemExit('usage: ... --python build-pose-glbs.py -- <bundle.blend> <out-dir>')
+        raise SystemExit(
+            'usage: ... --python build-pose-glbs.py -- <source> <out-dir>\n'
+            '  <source> is either the CC0 bundle .blend, or a directory holding an\n'
+            '  already-exported standing<suffix>.glb per figure. See load_standing_glb().')
     return argv[0], argv[1].rstrip('/')
 
 
@@ -397,14 +442,64 @@ def load_figure(blend, body):
     return obj
 
 
+def load_standing_glb(src_dir, suffix):
+    """Load a figure from an already-exported `standing<suffix>.glb` instead of the bundle.
+
+    WHY THIS EXISTS. The 48 MB source bundle is gitignored and is not fetchable everywhere,
+    so a machine without it cannot run this pipeline at all. But `standing.glb` *is* the
+    unposed source figure: `POSES['standing']` is empty, so the committed file is the bundle
+    mesh with the armature modifier applied over a rest pose (a no-op), multires dropped,
+    normals normalised, grounded and plan-centred. Everything downstream measures world
+    coordinates and re-derives its own skeleton, so it cannot tell the two sources apart —
+    a claim that was checked rather than assumed: rebuilding the four original poses from
+    `standing.glb` reproduces the bundle-built files at identical vertex and triangle counts
+    and identical file sizes, with bounds matching to 0.4 mm on `standing` and `sitting` and
+    within 6 mm on `crouching` and `lying`.
+
+    THE BUNDLE REMAINS THE SOURCE OF TRUTH. This path derives from an output of it, so it
+    can only reproduce what the committed library already contains: it cannot recover
+    multires detail, and if a committed `.glb` is ever wrong, poses built this way inherit
+    the error. Use the bundle whenever it is present.
+
+    Axes need no correction. glTF is y-up with the figure facing +z; Blender's importer
+    converts to z-up facing -y, which is exactly what the bundle path produces and what
+    `measure()` and `build_armature()` assume.
+    """
+    import os
+    path = f'{src_dir}/standing{suffix}.glb'
+    if not os.path.exists(path):
+        raise SystemExit(f'\nMissing source figure: {path}\n'
+                         'Expected an exported standing pose per figure in this directory.\n')
+
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    bpy.ops.import_scene.gltf(filepath=path)
+    meshes = [o for o in bpy.context.scene.objects if o.type == 'MESH']
+    if len(meshes) != 1:
+        raise SystemExit(f'{path}: expected exactly one mesh, found {len(meshes)}')
+
+    obj = meshes[0]
+    # The importer parents the mesh under an empty carrying the y-up→z-up conversion.
+    # Unparent keeping the transform, then bake it, so world coordinates are the vertex
+    # coordinates — which is what every measurement below reads.
+    obj.parent = None
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    return obj
+
+
 def main():
-    blend, out = args()
-    require(blend)
+    src, out = args()
+    from_glb = not src.endswith('.blend')
+    if not from_glb:
+        require(src)
 
     for suffix, body in FIGURES.items():
-        obj = load_figure(blend, body)
+        obj = load_standing_glb(src, suffix) if from_glb else load_figure(src, body)
         m = measure(obj)
-        print(f'LANDMARKS[{body}] ' + '  '.join(f'{k}={v:.3f}' for k, v in m.items()))
+        label = f'standing{suffix}.glb' if from_glb else body
+        print(f'LANDMARKS[{label}] ' + '  '.join(f'{k}={v:.3f}' for k, v in m.items()))
 
         rig = build_armature(obj, m)
         bind(obj, rig)

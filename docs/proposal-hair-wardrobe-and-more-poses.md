@@ -5,10 +5,10 @@ thinking I could get away with base manikins in a basic T-pose, I'd like to expl
 for poses, as well as better reference models with basic hairstyles (e.g. short male, long
 female, etc) and simple wardrobes."*
 
-This document is the analysis and the argument. Nothing here is authorized to build. **One of
-the three tracks needs no amendment at all and could start today; the other two contradict
-PRD §2 non-goal #7 as currently narrowed and need a §11 amendment first** — see "What needs
-an amendment" at the end.
+This document is the analysis and the argument. **Track 1 (poses) needs no amendment and its
+first batch was built on 13 August — see the note under Track 1. Tracks 2 and 3 (hair,
+wardrobe) contradict PRD §2 non-goal #7 as currently narrowed and remain unauthorized
+pending a §11 amendment** — see "What needs an amendment" at the end.
 
 ---
 
@@ -41,6 +41,13 @@ become one.
 ---
 
 ## Track 1 — more poses (no amendment, could start today)
+
+> **Track 1a was built on 13 August 2026.** Five of the six poses below shipped —
+> `kneeling`, `sitting-ground`, `leaning-back`, `head-down`, `slumped` — in both figures, so
+> the library is nine postures × two builds. `arms-raised` was built, found to be broken by a
+> pre-existing defect in the rig's automatic bind, and cut; that is written up in STATE.md
+> under "Pose library, second batch" and is the origin of **track 1c** below. See
+> `docs/poses-batch2-side.png`.
 
 ### What the pipeline can express today, and what it can't
 
@@ -223,13 +230,22 @@ describe what the geometry is.
 
 ## Sequencing
 
-1. **Track 1a — six new symmetric poses.** No amendment, no pipeline change. Immediate value,
-   and it re-exercises the pipeline end to end before anything harder is attempted.
-2. **Track 1b — asymmetric/multi-axis pose support.** No amendment. Answers the auto-weighting
-   question that tracks 2 and 3 also depend on.
-3. **Amendment (§11 v1.10) for hair and wardrobe**, adopting Option C and Shape 1, with the
+1. ~~**Track 1a — six new symmetric poses.**~~ **Done, 13 August 2026** — five of six, see the
+   note above. It re-exercised the pipeline end to end and turned up track 1c, which is
+   exactly what it was sequenced first to do.
+2. **Track 1b — asymmetric/multi-axis pose support.** No amendment. Generalise `rotate_x` to
+   take an axis and let `POSES` name bones per side.
+3. **Track 1c — skinning weights good enough to raise an arm.** No amendment (pipeline only),
+   but a real piece of work: bone-heat weighting gives the arm bones a band of hip and thigh,
+   because the hands rest against the thighs in the source figure's rest pose. Any pose that
+   lifts an arm past roughly half a radian drags a curtain of geometry with it. Needs proper
+   skinning — voxel/geodesic heat, or a hand-weighted `.blend` committed as pipeline input.
+   **Sequence this before 1b, not after**: asymmetric poses are mostly arm poses, so 1b
+   inherits this defect wholesale. Four attempted fixes and their measurements are recorded
+   in STATE.md so the next attempt does not restart from zero.
+4. **Amendment (§11 v1.10) for hair and wardrobe**, adopting Option C and Shape 1, with the
    Shape 2 tripwire written down.
-4. **Build the casting set**, per the amendment.
+5. **Build the casting set**, per the amendment.
 
 Each step is independently useful and each one stops cleanly.
 

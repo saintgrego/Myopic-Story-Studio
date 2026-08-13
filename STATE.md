@@ -2253,3 +2253,98 @@ The findings worth having here rather than only in the proposal:
 - **Nothing in any of the three tracks is buildable from a web session.** Blender is absent
   from the agent container and the source bundle is gitignored, so no `.glb` can be produced
   or seen in the viewport here. Pipeline code can be written for review; it cannot be run.
+
+---
+
+## Pose library, second batch (2026-08-13): five poses added, one abandoned with cause
+
+`public/assets/poses/` now holds **18 `.glb`s — nine postures × two figures**, up from eight.
+Added: `kneeling`, `sitting-ground`, `leaning-back`, `head-down`, `slumped`, each in the
+default and `-female` builds. `src/poses.json` gains ten rows; `scripts/blender/
+build-pose-glbs.py` and the `generate-pose-glbs.mjs` fallback both gain five. **No app code,
+no schema, no parser code, no `.myo` change** — `server/parser.js` builds its pose list from
+`poses.json` at require time, so it learns them from their hints alone. PRD §11 v1.7's
+acceptance criterion ("adding a fifth pose is a documented, repeatable procedure") is what
+authorises this; no amendment was needed or logged.
+
+Evidence: `docs/poses-batch2-front.png`, `docs/poses-batch2-side.png` (the side view is the
+one that reads — these are all sagittal-plane poses). All three gates green: `npx tsc
+--noEmit`, `npm run test:ci` (209 tests / 12 suites), `CI=true npm run build`.
+
+### The pipeline can now run without the 48 MB bundle
+
+`build-pose-glbs.py`'s source argument accepts **either** the CC0 bundle `.blend` **or a
+directory of already-exported `standing<suffix>.glb`** (`load_standing_glb`). This is what
+made the batch possible at all: the bundle is gitignored and `blender.org` is blocked by the
+agent proxy, so the bundle path was unavailable. `standing.glb` *is* the unposed source
+figure — `POSES['standing']` is empty — so everything downstream re-measures and re-rigs from
+it and cannot tell the sources apart.
+
+**Verified, not assumed.** Rebuilding the four original poses from `standing.glb` reproduced
+the bundle-built files at **identical vertex counts (12,010), triangle counts (21,160) and
+file sizes (500 KB)**, with bounds matching to 0.4 mm on `standing`/`sitting` and within 6 mm
+on `crouching`/`lying`. The bundle stays the source of truth: this path derives from an
+output of it, so it cannot recover multires detail and inherits any error in a committed
+`.glb`.
+
+Blender in the agent container: `apt-get install blender` gives 4.0.2, and **it needs
+`python3-numpy` installed separately** or the glTF importer dies with `ModuleNotFoundError`
+at `import_scene.gltf`. Cycles must run with `sc.cycles.use_denoising = False` — this build
+has no OpenImageDenoiser and raises rather than degrading.
+
+### `arms-raised` was cut, and why it is not a tuning problem
+
+A sixth pose, arms overhead, was built and abandoned. **The rig's automatic (bone-heat) bind
+hands the arm bones a large band of hip, outer thigh and flank** — measured by displacement
+against the rest pose: 2,300 vertices whose rest positions run y=0.435 (mid-thigh) to y=1.060
+(waist), at x = ±0.18. The cause is the source mesh's rest pose: the hands hang against the
+thighs, so the forearm bone sits ~2 cm from the outer thigh surface while the thigh bone,
+correctly inside the leg, is ~9 cm away.
+
+Raise an arm and that band follows it, dragging a curtain of triangles. At -2.7 rad it is two
+metre-long spikes beside the head; **at -1.2 rad there is still a web from the hands to the
+knees** — see `docs/poses-arm-bleed-artifact.png`. This is why every shipped pose keeps its
+arms at or below ~0.5 rad, and why the four original poses never exposed it (`crouching`'s
+-1.0 hides in the hunch).
+
+**Four fixes were built and measured, and all four were reverted. Do not retry them blind:**
+
+1. **Smoothing the weights** (`vertex_group_smooth`, 6 passes at 0.5). Changed 10,857 of
+   12,010 vertices; artefact untouched. The bad region is large and contiguous, not a scatter
+   — averaging a wrong region with itself keeps it wrong. Turning smoothing *off* made it
+   worse (square-edged curtains), so bone heat's blend is doing real work.
+2. **Separating arm from torso with `widest_gap`**, the landmark scan's own tool. Fixed the
+   ribcage flank only (287 vertices). At hip height the hand rests against the thigh with no
+   gap to find, which is exactly where the damage is.
+3. **Reassigning by nearest bone.** Confirms the wrong answer rather than fixing it — see the
+   2 cm/9 cm measurement above. Distance is what created the problem.
+4. **Region partition by walking the mesh graph** (BFS from hand/foot/neck seeds). This is
+   the right idea and it half-worked, but it needs two things that each took a full attempt
+   to find: **coincident vertices must be welded first** (glTF splits the surface at every
+   normal/UV seam, so a naive edge walk reaches only 6,430 of 12,010 vertices and strands the
+   whole curtain region), and **the arm seed cannot be a ball at the wrist** (a radius big
+   enough to hold the hand also holds thigh skin, so the walk floods the leg as "arm" and
+   strips the real arm — figures come out with limp arms and swinging legs). Enforcing the
+   partition in both directions also **severs the figure**: stripping the arm's share of
+   `spine` leaves a hard seam and the upper arms detach and float.
+
+The version that got closest — welded graph, gap-seeded arm, one-directional strip of arm
+weight from leg/core vertices below the armpit — still left curtains, and by then it was
+clearly a skinning-solver problem rather than a pose problem. **It was all reverted so the
+pipeline stays byte-identical for the existing four poses**, which is worth more than a
+sixth pose: the correction would have changed `sitting` and `crouching` output too, since
+both move their arms.
+
+**What raised arms would actually need:** proper skinning weights — voxel/geodesic heat
+rather than bone heat, or a hand-weighted `.blend` checked in as pipeline input. That is a
+real piece of work and it should be scoped deliberately, not slipped into a pose batch.
+Recorded in `docs/proposal-hair-wardrobe-and-more-poses.md` as track 1c.
+
+### Still open
+
+- **No live parse was run** — there is no `ANTHROPIC_API_KEY` in this container. The parser
+  reads `poses.json` at require time and its `POSE_LIST` was confirmed to render all 18 rows,
+  but whether the model reliably picks 1-of-18 is unverified and is the thing to watch. The
+  `crouching` hint was tightened ("kneeling at something" removed, since `kneeling` now
+  exists) for exactly this reason.
+- **Nothing was seen in the viewport.** The evidence renders are Blender/Cycles, not the app.
