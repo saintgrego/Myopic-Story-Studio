@@ -50,6 +50,31 @@
     "hint": "standing with both arms up overhead — surrender, hands up, cheering, reaching for something high, waving to someone far off — use this when the description does not indicate a woman"
   },
   {
+    "name": "walking",
+    "path": "/assets/poses/walking.glb",
+    "hint": "mid-stride, walking or running — legs in opposition, arms counter-swung; use when the character is moving rather than standing still — use this when the description does not indicate a woman"
+  },
+  {
+    "name": "pointing",
+    "path": "/assets/poses/pointing.glb",
+    "hint": "one arm raised out and forward to point at something, the other arm down, head following the point — indicating, directing, singling something out — use this when the description does not indicate a woman"
+  },
+  {
+    "name": "looking-off",
+    "path": "/assets/poses/looking-off.glb",
+    "hint": "standing square on but with the head turned away to look off to one side — distracted, hearing something, watching something leave frame — use this when the description does not indicate a woman"
+  },
+  {
+    "name": "turned-to-listen",
+    "path": "/assets/poses/turned-to-listen.glb",
+    "hint": "turned toward someone standing beside or behind them, torso round and head further — listening, being addressed, in conversation — use this when the description does not indicate a woman"
+  },
+  {
+    "name": "gesturing",
+    "path": "/assets/poses/gesturing.glb",
+    "hint": "mid-speech with one hand open and raised, the other arm quiet — talking, explaining, making a point — use this when the description does not indicate a woman"
+  },
+  {
     "name": "standing-female",
     "path": "/assets/poses/standing-female.glb",
     "hint": "upright on their feet, female figure — use when the description indicates a woman"
@@ -98,5 +123,30 @@
     "name": "arms-raised-female",
     "path": "/assets/poses/arms-raised-female.glb",
     "hint": "standing with both arms up overhead — surrender, hands up, cheering, reaching for something high, waving to someone far off — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "walking-female",
+    "path": "/assets/poses/walking-female.glb",
+    "hint": "mid-stride, walking or running — legs in opposition, arms counter-swung; use when the character is moving rather than standing still — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "pointing-female",
+    "path": "/assets/poses/pointing-female.glb",
+    "hint": "one arm raised out and forward to point at something, the other arm down, head following the point — indicating, directing, singling something out — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "looking-off-female",
+    "path": "/assets/poses/looking-off-female.glb",
+    "hint": "standing square on but with the head turned away to look off to one side — distracted, hearing something, watching something leave frame — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "turned-to-listen-female",
+    "path": "/assets/poses/turned-to-listen-female.glb",
+    "hint": "turned toward someone standing beside or behind them, torso round and head further — listening, being addressed, in conversation — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "gesturing-female",
+    "path": "/assets/poses/gesturing-female.glb",
+    "hint": "mid-speech with one hand open and raised, the other arm quiet — talking, explaining, making a point — female figure, use when the description indicates a woman"
   }
 ]

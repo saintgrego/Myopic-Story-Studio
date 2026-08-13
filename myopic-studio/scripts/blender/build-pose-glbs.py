@@ -109,6 +109,41 @@ POSES = {
     # Hands overhead — surrender, reaching a high shelf, a crowd. Held a little short of
     # vertical so the arms read as raised rather than as a flagpole.
     'arms-raised': {'armForward': -2.7, 'elbowBend': -0.15},
+
+    # --- added 13 August 2026 (track 1b). The first poses that are not bilaterally
+    # symmetric, and the first that leave the sagittal plane. Two more were attempted and
+    # abandoned — see "SELF-CONTACT POSES" below.
+
+    # Mid-stride: legs in opposition, arms counter-swung. The one pose that answers "which
+    # way is this character going", which a standing figure cannot.
+    'walking': {'thigh.L': ('X', -0.55), 'shin.L': ('X', 0.3), 'thigh.R': ('X', 0.35),
+                'shin.R': ('X', 0.55), 'upperarm.L': ('X', 0.45), 'upperarm.R': ('X', -0.45),
+                'elbowBend': -0.35},
+    # One arm out and forward, the other down; the head follows the point a little. Directs
+    # the eye out of frame, which is blocking, not decoration.
+    'pointing': {'upperarm.R': [('X', -1.5), ('Y', 0.25)], 'forearm.R': ('X', -0.15),
+                 'upperarm.L': ('X', -0.1), 'headTurn': -0.12},
+    # Attention off-camera with the body still square on — the eyeline leaves the shot
+    # before the body does.
+    'looking-off': {'headTurn': 0.8, 'torsoTwist': 0.15},
+    # Turned toward someone beside them: torso round, head further. Built for two-handers,
+    # where a pair has to read as a pair.
+    'turned-to-listen': {'torsoTwist': 0.35, 'headTurn': 0.45, 'armForward': -0.12},
+    # Mid-speech, one hand open and raised. The other arm stays quiet so the gesture reads.
+    'gesturing': {'upperarm.R': [('X', -0.95), ('Y', 0.45)], 'forearm.R': ('X', -0.8),
+                  'upperarm.L': ('X', -0.2), 'headTurn': -0.2},
+
+    # SELF-CONTACT POSES ARE STILL OUT, and `hand-on-hip` and `arms-crossed` are the proof.
+    # Both were requested, attempted across four tuning rounds, and abandoned. They are not
+    # a matter of finding better angles: each needs the hand to arrive at a particular place
+    # ON THE BODY, and this rig has no clavicle and no wrist, so the hand's position is the
+    # product of exactly two joint angles. Measured, the reachable set does not include the
+    # places those poses need. Folding the elbow puts the hands in front of the sternum
+    # (wrist z=1.015); swinging the forearm about y crosses the midline but drops the hand
+    # to the thigh (z=0.66) or throws it forward past the face (z=1.43, y=-0.73). "Hand
+    # resting near the hip" comes out as "arm hanging slightly out", which is a different
+    # pose. Section 11's own note stands: a pose that must agree with another surface —
+    # someone else's, a prop's, or the figure's own — needs more than a joint table.
 }
 
 

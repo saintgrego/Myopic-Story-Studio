@@ -361,6 +361,18 @@ const POSES = {
   // separate primitives on their own pivots, so there is no skin to tear. The authored
   // figure could not until the Blender pipeline's arm-weight bleed was fixed (13 Aug).
   'arms-raised': { hipY: 0.77, armForward: -2.7, elbowBend: -0.15 },
+
+  // THE TABLE STOPS BEING IN STEP HERE, deliberately. The Blender pipeline gained
+  // asymmetric and off-axis poses on 13 August (walking, pointing, looking-off,
+  // turned-to-listen, gesturing); this generator applies one angle per joint to both sides
+  // and only about x, so it cannot express any of them. Bringing it level means a second
+  // implementation of JOINT_ALIASES and BONE_ORDER against three.js groups, which is a lot
+  // of machinery for a fallback whose whole point is being crude but dependency-free.
+  //
+  // It already produces a subset — it has never built the `-female` figures either — so the
+  // shape of the compromise is not new. Run it and you get the nine symmetric postures as
+  // primitive mannequins; poses.json will still list the rest, and those paths will 404
+  // until the Blender pipeline is run. That is the documented cost of the no-Blender path.
 };
 
 mkdirSync(OUT_DIR, { recursive: true });

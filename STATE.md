@@ -2473,3 +2473,44 @@ it: churning 10 MB of assets for half a millimetre is a worse trade than the dif
 **Still open:** the head/neck shows a small dark band under `torsoTwist`, which is the neck
 weighting meeting a twist it has not been asked for before. Worth a look before any pose
 ships a large twist.
+
+### Track 1b, second half: five asymmetric poses ship, two were abandoned
+
+`walking`, `pointing`, `looking-off`, `turned-to-listen`, `gesturing` — in both figures, so
+the library is **fifteen postures × two builds, 30 `.glb`s**. Evidence:
+`docs/poses-asymmetric-five.png`. All 30 grounded, all three gates green, `poses.json` at 30
+rows. These are the first poses that are not bilaterally symmetric and the first that leave
+the sagittal plane.
+
+**`hand-on-hip` and `arms-crossed` were requested, attempted over four tuning rounds, and
+cut.** They are not a matter of finding better angles, and the reason generalises: both are
+**self-contact** poses — the hand has to arrive at a particular place *on the body*. This rig
+has no clavicle and no wrist, so a hand's position is the product of exactly two joint
+angles, and the reachable set does not contain the places those poses need. Measured, with
+the wrist tracked in armature space each round:
+
+| attempt | wrist lands at | reads as |
+| --- | --- | --- |
+| fold the elbow (`elbowBend -1.85`) | x=0.165, z=1.015 | hands in front of the sternum |
+| swing the forearm about y (`Y 1.3`) | x=-0.114, z=1.007 | crosses the midline, but hand is behind |
+| both, tuned (`x2`, `c1`-`c3`) | x=0.056, z=0.793 | hands clasped at the waist, not crossed |
+| elbows raised first (`d1`-`d3`) | x=0.231, y=-0.733, z=1.429 | hands out in front of the face |
+| hip candidates (`k4`-`k6`) | x=0.17, z=0.63 | arm hanging slightly out, not on the hip |
+
+PRD §11's note already said contact poses need the pose to agree with another surface and are
+"genuinely hard; probably permanently out". The finding here is that **a figure's own body is
+another surface** — self-contact is the same problem as leaning on a wall, and the two were
+misfiled as ordinary asymmetric poses when the track was scoped.
+
+**Known artefact:** `looking-off` and `turned-to-listen` show a faint dark band at the neck,
+where the neck weighting meets a twist it was never asked for before. Small at blocking scale
+and left alone; it is the same class of thing as the armpit crease, and the place to look
+first if a larger `torsoTwist` is ever wanted.
+
+**The two generator tables are now deliberately out of step.** `generate-pose-glbs.mjs`
+applies one angle per joint to both sides and only about x, so it cannot express any of the
+five. Levelling it up means a second implementation of `JOINT_ALIASES`/`BONE_ORDER` against
+three.js groups — a lot of machinery for a fallback whose point is being crude and
+dependency-free. It already built a subset (it has never made the `-female` figures), so run
+it and you get the nine symmetric postures; the other paths in `poses.json` 404 until the
+Blender pipeline runs. Written up at the bottom of its `POSES` table.

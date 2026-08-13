@@ -5,9 +5,9 @@ thinking I could get away with base manikins in a basic T-pose, I'd like to expl
 for poses, as well as better reference models with basic hairstyles (e.g. short male, long
 female, etc) and simple wardrobes."*
 
-This document is the analysis and the argument. **Track 1 (poses) needs no amendment and is
-now largely built — tracks 1a and 1c shipped on 12-13 August; see the note under Track 1.
-Tracks 2 and 3 (hair, wardrobe) contradict PRD §2 non-goal #7 as currently narrowed and remain
+This document is the analysis and the argument. **Track 1 (poses) needed no amendment and is
+now complete — 1a, 1c and 1b all shipped on 12-13 August; see the note under Track 1. Tracks 2
+and 3 (hair, wardrobe) contradict PRD §2 non-goal #7 as currently narrowed and remain
 unauthorized pending a §11 amendment** — see "What needs an amendment" at the end.
 
 ---
@@ -42,12 +42,15 @@ become one.
 
 ## Track 1 — more poses (no amendment, could start today)
 
-> **Tracks 1a and 1c are built (12-13 August 2026).** All six poses below shipped, in both
-> figures — the library is **ten postures × two builds**. `arms-raised` was cut on 12 August
-> because the rig's automatic bind tore the figure; **track 1c fixed that on 13 August** and
-> it now ships. The fix also repaired the poses already in the library: `sitting` alone had a
-> quarter-metre of hip skin being dragged by its own arms. Both are written up in STATE.md.
-> See `docs/poses-library-ten.png` and `docs/poses-arm-fix-after.png`.
+> **Track 1 is built (12-13 August 2026): 1a, then 1c, then 1b.** The library is **fifteen
+> postures × two figures, 30 `.glb`s**. All six symmetric poses below shipped; `arms-raised`
+> was cut on 12 August because the rig's automatic bind tore the figure, and **1c fixed that**
+> — a fix that also repaired the poses already shipped, since `sitting` alone had a
+> quarter-metre of hip skin dragged sideways by its own arms. **1b** then added the first
+> asymmetric, off-axis poses: `walking`, `pointing`, `looking-off`, `turned-to-listen`,
+> `gesturing`. Two more, `hand-on-hip` and `arms-crossed`, were cut as self-contact poses.
+> All of it is written up in STATE.md. See `docs/poses-library-ten.png`,
+> `docs/poses-arm-fix-after.png` and `docs/poses-asymmetric-five.png`.
 
 ### What the pipeline can express today, and what it can't
 
@@ -85,7 +88,10 @@ it is where body language actually lives:
   off-camera. `rotate_x()` is hard-coded to `Matrix.Rotation(angle, 4, 'X')`.
 - **Contact poses.** Leaning on a wall, sitting *on* a specific prop, hands on a table. These
   need the pose to agree with another object's geometry, which the pipeline has no knowledge
-  of. Genuinely hard; probably permanently out.
+  of. Genuinely hard; probably permanently out. **Sharpened on 13 August: the figure's own
+  body is one of those surfaces.** `hand-on-hip` and `arms-crossed` were attempted and cut
+  for exactly this reason — with no clavicle and no wrist, a hand's position is the product
+  of two joint angles, and "touching the hip" is not in the reachable set.
 
 ### The pipeline extension
 
@@ -233,10 +239,14 @@ describe what the geometry is.
 1. ~~**Track 1a — six new symmetric poses.**~~ **Done, 13 August 2026** — five of six, see the
    note above. It re-exercised the pipeline end to end and turned up track 1c, which is
    exactly what it was sequenced first to do.
-2. **Track 1b — asymmetric/multi-axis pose support.** No amendment. Generalise `rotate_x` to
-   take an axis and let `POSES` name bones per side. **Now unblocked** — it was sequenced
-   after 1c precisely because asymmetric poses are mostly arm poses, and it would have
-   inherited that defect wholesale.
+2. ~~**Track 1b — asymmetric/multi-axis pose support.**~~ **Done, 13 August 2026.** The
+   machinery landed first (axis argument, per-bone entries, and a prerequisite nobody
+   predicted: plan-centring had to move from the bounding box to the pelvis, or an
+   asymmetric figure slides off its own origin). Then five poses: `walking`, `pointing`,
+   `looking-off`, `turned-to-listen`, `gesturing`. **`hand-on-hip` and `arms-crossed` were
+   cut** — they are self-contact poses, and a figure's own body turns out to be just another
+   surface the pose has to agree with, which is the category this section already calls
+   "probably permanently out". Measurements in STATE.md.
 3. ~~**Track 1c — skinning weights good enough to raise an arm.**~~ **Done, 13 August 2026.**
    Neither voxel heat nor a hand-weighted `.blend` was needed in the end: the armpit apex is
    found by cutting the surface until it falls into three connected components, and arm-bone
