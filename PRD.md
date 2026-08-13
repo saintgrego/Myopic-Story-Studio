@@ -81,7 +81,7 @@ Carry the parameter definitions forward from `myopic-3d-studio.md` sections 3.1�
 - **Environment:** location name, **setting (`Interior` | `Exterior`, added 31 July 2026)**, time of day, weather/atmosphere. No background asset field (nothing to point it at). `setting` exists because interior/exterior was only ever free text inside the location name, and the renderer has to know it as a fact — a sky must not appear indoors. The parser extracts it from INT./EXT. slugline framing. `.myo` files written before it existed stay loadable: the viewport falls back to sniffing the location name, so no migration is required. `weather` now also drives fog density, not just sky turbidity, so it is worth phrasing precisely ("light mist" and "thick fog" render differently).
 - **Lighting:** scheme, key direction (azimuth/elevation), key colour, fill ratio, rim toggle, shadow softness, mood preset, and **fill colour and rim colour (`fillColor` / `rimColor`, added 8 August 2026 — see section 11)**. These map to real Three.js lights. Both new colours default to `#ffffff`, which is cosmetically neutral: `.myo` files written before they existed render identically, so no migration is required — the same backward-compat pattern as `environment.setting`.
 - **Camera:** shot type, angle, focal length (mm), depth of field, focus subject, XYZ position, movement (metadata only), aspect ratio. **The focal length must genuinely drive the Three.js camera FOV.** A 35mm and an 85mm must look different. **Focus subject (v1.2 track) aims the shot camera**, and **depth of field is read by the viewport as of v1.3** — as a computed near/far focus readout and ground-plane markers, never as rendered blur. See section 11.
-- **Characters:** figure ID, position XYZ, rotation, scale, visibility, `mesh` reference. Drop expression and costume — nothing to attach them to. **Posture (v1.2) is not a new field:** a pose is expressed entirely through the existing `mesh` reference — `/assets/poses/sitting.glb` *is* the sitting pose. See section 11 for why.
+- **Characters:** figure ID, position XYZ, rotation, scale, visibility, `mesh` reference. Drop expression and costume — nothing to attach them to. **Costume is narrowed in v1.10:** there is now something to attach it to (an authored figure, v1.7), so wardrobe and coarse hair silhouette are baked into the figure the `mesh` reference already names. Costume as a *field* stays dropped, and expression stays dropped entirely. **Posture (v1.2) is not a new field:** a pose is expressed entirely through the existing `mesh` reference — `/assets/poses/sitting.glb` *is* the sitting pose. See section 11 for why.
 - **Props:** prop ID, position, rotation, scale, visibility, `mesh` reference. **The mesh may be a library proxy (v1.4):** `/assets/props/sofa.glb` *is* the sofa, on the same "the mesh is the object type" reasoning as poses. See section 11.
 
 ### Scene file (`.myo`)
@@ -397,7 +397,7 @@ A rename to a symmetric `-male`/`-female` pair would read better and is delibera
 - [ ] All eight `.glb`s measure `min.y = 0` and face +Z.
 - [ ] A prompt describing a woman parses to a `-female` pose mesh.
 
-**Still out:** any third figure without a further amendment, body-type as an adjustable parameter, and figure choice as a field on `Character` — it rides the `mesh` reference like everything else.
+**Still out:** any third figure without a further amendment (**reopened in v1.10, which raises the roster to a capped six and states what a "figure" now includes**), body-type as an adjustable parameter, and figure choice as a field on `Character` — it rides the `mesh` reference like everything else.
 
 ### v1.9 — 11 August 2026: set pieces (walls, floors, ceilings, doors, windows)
 
@@ -434,3 +434,55 @@ A rename to a symmetric `-male`/`-female` pair would read better and is delibera
 - [x] A scene with a piece in each category builds five groups; toggling one category's boolean changes only that group.
 - [x] A door or window with `depth: 0` renders as a thin plane rather than degenerate or NaN geometry.
 - [x] `npx tsc --noEmit`, `npm run test:ci` and `CI=true npm run build` stay green.
+
+### v1.10 — 13 August 2026: wardrobe and coarse hair, as part of the figure
+
+**Requested by the owner on 13 August 2026.** v1.7 and v1.8 made the figures good enough that the next thing missing became obvious: eight identical nude bodies. A detective and the suspect are the same mesh, and a scene that stages both has the same legibility problem v1.8 was written to fix, one level up.
+
+**Applying the section 11 test, and conceding half of it.** Wardrobe passes on exactly the argument v1.8 won on — a director reading their own storyboard should not have to remember which figure is which, and silhouette is what makes that readable at a glance. A long coat and a shirt are different shapes at 35mm, they occupy different amounts of frame, and a coat changes where a figure's outline meets a doorway. That is blocking.
+
+**Hair mostly fails it, and is admitted only in its coarsest form.** Hair is where "does this look real" lives. What survives the test is head *silhouette*: bare, cropped, or gathered/long changes the shape of the head against a background and gives an otherwise symmetric skull a front and a back, which is the eyeline cue a director actually reads. Everything past that — strands, cards, transparency, physics, colour — answers a finishing question and is **out**, named on the out-list below so this amendment cannot be cited for it later. Note what is *not* being claimed anywhere here: no texture, no material variety, no fabric. Library figures are still re-materialled flat from `src/palette.ts` at load, and the "Rendering scope" out-list is untouched. **This amendment changes geometry, never shading** — the same sentence v1.7 closed on, and for the same reason.
+
+**The core decision — wardrobe is not a new axis; it is part of what "figure" means.** A dressed figure is a *figure*, in v1.8's sense: another entry in a fixed, small roster, named by suffix, exported once per pose. `/assets/poses/standing-coat.glb` *is* the figure in the coat, carried by the `mesh` reference that already exists. No schema change, no parser code change, no `.myo` change, no `buildObject()` change.
+
+**Two alternatives were weighed and rejected.**
+
+- **A `wardrobe` field on `Character`**, resolved to geometry by the renderer. Rejected for the reason section 4 and v1.2 both give: it creates a second source of truth for what a character looks like, and the renderer would have to ask something other than the mesh reference.
+- **A second mesh reference — figure plus garment as separate glTFs, parented at load.** This is the tempting one, because it keeps the library additive instead of multiplicative: three garments would be three files rather than three files per pose per body. It is rejected because it puts a second thing in `buildObject()`, which section 4 exists to forbid, and because a garment that is not exported with the pose does not fit the pose — a coat authored on a standing body intersects a seated one at the hip and knee. The saving is real and the cost is a schema change plus geometry that is wrong in half the library.
+
+**The cost this decision accepts, stated plainly.** The library is poses × figures, so every figure added is four more `.glb` files at roughly 500 KB each — about 2 MB per figure, against 4 MB for the eight files that exist today. That is the whole reason for the cap below. v1.7 deferred the asset-storage decision until real file sizes were known; they are now known for the *output* library (500 KB/pose, committed to `public/assets/`, no LFS needed at this scale), and the cap is what keeps that answer true.
+
+**The roster is capped at six figures.** Twenty-four files, roughly 12 MB, and a pose dropdown that still fits on screen. A seventh needs another amendment. This is not a systematic wardrobe feature and must not grow into one by increments — the cap is the mechanism that makes each addition a decision rather than a habit.
+
+**Naming extends v1.8's rule unchanged.** The path is `<pose><figure-suffix>.glb`; the bare suffix is the default figure and keeps working, because saved `.myo` files reference those four paths and they are the user's data. A suffix names a whole figure identity — body, wardrobe, and hair together — not a garment slot, so `-coat` is a figure, not an attachment, and there is no `-coat-longhair` combinatorial tail.
+
+**Where the garment and hair geometry comes from, decided here: derived from the base mesh, in the pipeline.** The CC0 bundle in `assets-src/` holds bodies only, so a garment source was genuinely open. Rather than take on a second upstream asset with its own licence and its own topology, `scripts/blender/build-pose-glbs.py` derives wardrobe from the body it already has: select a vertex band by *measured* height, duplicate the surface, solidify it outward, and extend the hem. A coat is the torso-and-thigh surface offset and lengthened; a skirt is the hip band swept to the knee; gathered hair is the skull cap offset and massed at the back. This is the same doctrine the skeleton already follows in that file — where a value is computable from what was built, compute it — and it keeps the whole pipeline CC0, reproducible, and free of a second download. A second CC0 garment source stays available as the fallback if derived geometry proves unreadable at 35mm; that is a change to the pipeline alone, exactly as v1.7 framed the MakeHuman fallback.
+
+**What changed in this document**
+
+- **Section 5 Characters**: "Drop expression and costume — nothing to attach them to" is narrowed in place. There is something to attach it to now. Costume as a *field* stays dropped; expression stays dropped entirely.
+- **v1.8's "still out" list is reopened in place** on its "any third figure without a further amendment" clause, which is precisely the clause this amendment exists to satisfy.
+- **Non-goal #7 is untouched.** Nothing here rigs, articulates, morphs, or expresses. A garment is static geometry exported into a static pose.
+- **No schema change, no parser code change, no `.myo` change.** `poses.json` gains rows; `server/parser.js` builds its pose list from that file at require time, so the parser learns new figures from their hints alone — the v1.8 mechanism, reused.
+
+**Authorized to build under this amendment**
+
+1. **Garment and hair derivation in `scripts/blender/build-pose-glbs.py`**, measured from the base mesh as described above, applied before the armature is applied and the rig deleted, so the garment poses with the body.
+2. **Four new figures, bringing the roster to six** — two wardrobe variants per body, chosen for silhouette separation rather than for period or genre. Suffixes and hints land in `poses.json` alongside the existing eight rows.
+3. **Coarse hair silhouette on every figure in the roster**, including the existing two, as part of the same export. This changes the four original `.glb` binaries in place; their paths and meaning are unchanged, so saved scenes are unaffected.
+4. **Parser hint text for the new figures**, in `poses.json` only. Wardrobe stated in the prompt and matched → that figure. Wardrobe unstated → the default figure for that body, **no flag** (absence of wardrobe is normal, not ambiguous — v1.2's rule for posture, applied unchanged). Wardrobe stated but unmatched ("in a spacesuit") → nearest figure, flagged through the existing `poseNote` path, which already exists and already gets stripped before the scene is built.
+
+**Conventions the new output must meet** — unchanged from v1.7, restated because a garment is the next thing that can violate them silently: base-anchored (`Box3.min.y === 0` within 1 mm, asserted by `poses.test.ts`), faces +Z, life-sized in metres so `scale` stays 1, and **no texture maps** — any authored material is discarded at load by the palette re-material, which is what the out-list requires anyway.
+
+**Still out, and not to be built without a further amendment:** hair beyond coarse silhouette (strands, cards, transparency, physics, hair colour), a seventh figure, wardrobe as a field or a dial on `Character`, garment-as-separate-mesh attachment, per-garment colour, and everything already on section 11's rendering out-list. Rigging, IK, pose editors, morphs, facial expression and animation stay out — non-goals #6 and #7 are untouched by this.
+
+**Acceptance (owner-verifiable, per section 8's convention):**
+
+- [ ] Six figures across four poses render as twenty-four meshes, with no code change outside the pipeline script and `poses.json`.
+- [ ] Two characters in one shot, in different wardrobe, are distinguishable at 35mm in camera view — the v1.8 test, one level harder.
+- [ ] Every `.glb` in the library measures `min.y = 0` and faces +Z, verified with `scripts/measure-glb.mjs`.
+- [ ] Every saved `.myo` referencing the original four paths still loads and renders, now clothed, with no file rewritten on disk.
+- [ ] A prompt naming wardrobe parses to the matching figure; a prompt naming none parses to the default figure with no flag.
+- [ ] `npx tsc --noEmit`, `npm run test:ci` and `CI=true npm run build` stay green.
+
+**Deliberately not decided here:** whether *props* ever gain authored geometry (still open, as v1.7 left it), and whether the derived-garment approach or a second CC0 source is the long-term pipeline — that is settled by looking at the first export, not by argument.

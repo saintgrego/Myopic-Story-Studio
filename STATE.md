@@ -2219,3 +2219,50 @@ Also still untested: the three fetch wrappers (`lib/parser.ts`, `sceneApi.ts`,
 and `Viewport.tsx`'s remaining extractable pure logic (`isExterior`'s `locationName` fallback,
 `buildObject`'s `mesh.kind` switch, and whether the palette is indexed by scene-array position
 rather than a filtered counter — the exact regression `palette.ts`'s own comment warns about).
+
+---
+
+## Wardrobe and hair amendment drafted (2026-08-13): PRD §11 v1.10, document only
+
+**Nothing was built.** This is the amendment text only, per §11's own rule that scope is
+amended before it is built. No script, `poses.json` row, or `.glb` was touched, and all
+three gates are untouched because no code changed.
+
+**The scope call, which is the part worth remembering.** Wardrobe passes §11's blocking
+test on v1.8's argument — silhouette is what lets a director tell two figures apart at
+35mm. **Hair mostly fails it** and is admitted only as coarse head silhouette (bare /
+cropped / gathered), because that is what gives a symmetric skull a front and a back for
+eyeline. Strands, cards, transparency, physics and hair colour are named on the out-list
+so this amendment cannot be cited for them later.
+
+**The design decision, and the two rejections.** A dressed figure is a *figure* in v1.8's
+sense — another suffix in the roster, exported once per pose, carried by the `mesh`
+reference that already exists. Rejected: a `wardrobe` field on `Character` (two sources of
+truth, exactly what §4 forbids), and figure-plus-garment as separate glTFs parented at
+load (additive rather than multiplicative, genuinely tempting, but it puts a second thing
+in `buildObject()` and a garment authored on a standing body intersects a seated one at
+the hip and knee).
+
+**The cost that decision accepts, and the cap that bounds it.** The library is poses ×
+figures, so each figure is 4 files at ~500 KB — ~2 MB, against the 4 MB the current eight
+occupy. The roster is therefore **capped at six figures** (24 files, ~12 MB); a seventh
+needs another amendment. This also finally answers v1.7's deferred asset-storage question
+for the *output* library: in-repo under `public/assets/`, no LFS at this scale.
+
+**Where garment geometry comes from, decided in the text.** The CC0 bundle in
+`assets-src/` is bodies only, so rather than take on a second upstream asset,
+`build-pose-glbs.py` derives garments from the body it already has — select a vertex band
+by measured height, duplicate, solidify outward, extend the hem — before the armature is
+applied and the rig deleted, so the garment poses with the body. Same doctrine as the
+skeleton in that file: where a value is computable from what was built, compute it. A
+second CC0 garment source stays the fallback if derived geometry doesn't read at 35mm.
+
+**Marked in place in PRD.md**, per the v1.7 convention: §5 Characters' "Drop expression and
+costume — nothing to attach them to" (there is something to attach it to now; costume as a
+*field* stays dropped, expression stays dropped entirely), and v1.8's "any third figure
+without a further amendment" clause, which is the clause v1.10 exists to satisfy.
+Non-goal #7 is untouched — a garment is static geometry in a static pose.
+
+**Not yet done, in order:** the derived-garment spike in Blender (one export, checked for
+`min.y = 0`, +Z facing, and readability at 35mm) before any roster rows are written. v1.2
+and v1.7 both proved the mechanism before the library grew; this should too.
