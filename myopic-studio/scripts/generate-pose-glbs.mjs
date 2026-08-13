@@ -357,6 +357,10 @@ const POSES = {
   'head-down': { hipY: 0.77, headTilt: 0.5, armForward: -0.35, elbowBend: -0.5 },
   // Collapsed through the spine and neck with the legs nearly straight.
   slumped: { hipY: 0.7, torsoBend: 0.7, headTilt: 0.4, thighForward: -0.2, kneeBend: 0.35, armForward: 0.1 },
+  // Both arms overhead. This mannequin has always been able to do it — its limbs are
+  // separate primitives on their own pivots, so there is no skin to tear. The authored
+  // figure could not until the Blender pipeline's arm-weight bleed was fixed (13 Aug).
+  'arms-raised': { hipY: 0.77, armForward: -2.7, elbowBend: -0.15 },
 };
 
 mkdirSync(OUT_DIR, { recursive: true });

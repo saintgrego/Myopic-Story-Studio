@@ -45,6 +45,11 @@
     "hint": "standing but collapsed forward through the spine and neck, legs nearly straight — exhausted, defeated, grieving; prefer 'crouching' if they are down on bent knees — use this when the description does not indicate a woman"
   },
   {
+    "name": "arms-raised",
+    "path": "/assets/poses/arms-raised.glb",
+    "hint": "standing with both arms up overhead — surrender, hands up, cheering, reaching for something high, waving to someone far off — use this when the description does not indicate a woman"
+  },
+  {
     "name": "standing-female",
     "path": "/assets/poses/standing-female.glb",
     "hint": "upright on their feet, female figure — use when the description indicates a woman"
@@ -88,5 +93,10 @@
     "name": "slumped-female",
     "path": "/assets/poses/slumped-female.glb",
     "hint": "standing but collapsed forward through the spine and neck, legs nearly straight — exhausted, defeated, grieving; prefer 'crouching-female' if they are down on bent knees — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "arms-raised-female",
+    "path": "/assets/poses/arms-raised-female.glb",
+    "hint": "standing with both arms up overhead — surrender, hands up, cheering, reaching for something high, waving to someone far off — female figure, use when the description indicates a woman"
   }
 ]

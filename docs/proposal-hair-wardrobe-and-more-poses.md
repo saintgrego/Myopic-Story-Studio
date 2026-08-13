@@ -5,10 +5,10 @@ thinking I could get away with base manikins in a basic T-pose, I'd like to expl
 for poses, as well as better reference models with basic hairstyles (e.g. short male, long
 female, etc) and simple wardrobes."*
 
-This document is the analysis and the argument. **Track 1 (poses) needs no amendment and its
-first batch was built on 13 August — see the note under Track 1. Tracks 2 and 3 (hair,
-wardrobe) contradict PRD §2 non-goal #7 as currently narrowed and remain unauthorized
-pending a §11 amendment** — see "What needs an amendment" at the end.
+This document is the analysis and the argument. **Track 1 (poses) needs no amendment and is
+now largely built — tracks 1a and 1c shipped on 12-13 August; see the note under Track 1.
+Tracks 2 and 3 (hair, wardrobe) contradict PRD §2 non-goal #7 as currently narrowed and remain
+unauthorized pending a §11 amendment** — see "What needs an amendment" at the end.
 
 ---
 
@@ -42,12 +42,12 @@ become one.
 
 ## Track 1 — more poses (no amendment, could start today)
 
-> **Track 1a was built on 13 August 2026.** Five of the six poses below shipped —
-> `kneeling`, `sitting-ground`, `leaning-back`, `head-down`, `slumped` — in both figures, so
-> the library is nine postures × two builds. `arms-raised` was built, found to be broken by a
-> pre-existing defect in the rig's automatic bind, and cut; that is written up in STATE.md
-> under "Pose library, second batch" and is the origin of **track 1c** below. See
-> `docs/poses-batch2-side.png`.
+> **Tracks 1a and 1c are built (12-13 August 2026).** All six poses below shipped, in both
+> figures — the library is **ten postures × two builds**. `arms-raised` was cut on 12 August
+> because the rig's automatic bind tore the figure; **track 1c fixed that on 13 August** and
+> it now ships. The fix also repaired the poses already in the library: `sitting` alone had a
+> quarter-metre of hip skin being dragged by its own arms. Both are written up in STATE.md.
+> See `docs/poses-library-ten.png` and `docs/poses-arm-fix-after.png`.
 
 ### What the pipeline can express today, and what it can't
 
@@ -103,11 +103,11 @@ no schema anywhere near it:
    that ordering is load-bearing and the script's comment explains why at length. Any
    generalisation must preserve it or the shin pivots about where the knee used to be.
 
-Risk: low, and bounded to the generator. The tripwire is that asymmetric poses will expose
-whether the *auto-weighted* bind holds up under larger rotations — bone-heat weighting on an
-unrigged base mesh is adequate for symmetric bends and may pinch at a rotated shoulder. That
-is a "look at it" question, not a design question, and it is exactly what the first
-asymmetric export answers.
+Risk: low, and bounded to the generator. This section predicted the tripwire — *"asymmetric
+poses will expose whether the auto-weighted bind holds up under larger rotations"* — and it
+fired early, on a symmetric pose: `arms-raised` tore the figure open on 12 August. That is now
+fixed (track 1c), so 1b inherits a bind that survives -3.0 rad, and the remaining risk really
+is just the axis plumbing.
 
 **This track needs no amendment.** v1.7's acceptance criteria explicitly include *"Adding a
 fifth pose is a documented, repeatable procedure"*, and v1.2's rule still holds: if a pose can
@@ -234,15 +234,14 @@ describe what the geometry is.
    note above. It re-exercised the pipeline end to end and turned up track 1c, which is
    exactly what it was sequenced first to do.
 2. **Track 1b — asymmetric/multi-axis pose support.** No amendment. Generalise `rotate_x` to
-   take an axis and let `POSES` name bones per side.
-3. **Track 1c — skinning weights good enough to raise an arm.** No amendment (pipeline only),
-   but a real piece of work: bone-heat weighting gives the arm bones a band of hip and thigh,
-   because the hands rest against the thighs in the source figure's rest pose. Any pose that
-   lifts an arm past roughly half a radian drags a curtain of geometry with it. Needs proper
-   skinning — voxel/geodesic heat, or a hand-weighted `.blend` committed as pipeline input.
-   **Sequence this before 1b, not after**: asymmetric poses are mostly arm poses, so 1b
-   inherits this defect wholesale. Four attempted fixes and their measurements are recorded
-   in STATE.md so the next attempt does not restart from zero.
+   take an axis and let `POSES` name bones per side. **Now unblocked** — it was sequenced
+   after 1c precisely because asymmetric poses are mostly arm poses, and it would have
+   inherited that defect wholesale.
+3. ~~**Track 1c — skinning weights good enough to raise an arm.**~~ **Done, 13 August 2026.**
+   Neither voxel heat nor a hand-weighted `.blend` was needed in the end: the armpit apex is
+   found by cutting the surface until it falls into three connected components, and arm-bone
+   weight is then taken off the body below it. Arms now pose to -3.0 rad — straight overhead —
+   cleanly. Five failed approaches and the measurements that killed them are in STATE.md.
 4. **Amendment (§11 v1.10) for hair and wardrobe**, adopting Option C and Shape 1, with the
    Shape 2 tripwire written down.
 5. **Build the casting set**, per the amendment.

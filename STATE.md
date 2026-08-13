@@ -2348,3 +2348,83 @@ Recorded in `docs/proposal-hair-wardrobe-and-more-poses.md` as track 1c.
   `crouching` hint was tightened ("kneeling at something" removed, since `kneeling` now
   exists) for exactly this reason.
 - **Nothing was seen in the viewport.** The evidence renders are Blender/Cycles, not the app.
+
+---
+
+## Track 1c — the skinning fix (2026-08-13): raised arms work, and the old poses were wrong too
+
+`resolve_arm_bleed` in `scripts/blender/build-pose-glbs.py` fixes the defect that cut
+`arms-raised` from the second batch. The arm-angle ceiling is gone: a sweep runs to **-3.0
+rad, arms straight overhead, clean** (`docs/poses-arm-fix-after.png`, and the shoulder
+close-up in `docs/poses-arm-fix-shoulder.png`). `arms-raised` ships in both figures, so the
+library is **ten postures × two builds, 20 `.glb`s**. All three gates green; all 20 grounded.
+
+**This was not only an enabler — it repaired the poses already shipped.** Isolating the fix on
+`sitting` (same source, same Blender, bind with and without it) moves **1,080 vertices, all
+between y=0.226 and y=1.156, with a maximum displacement of 0.247 m**. The committed `sitting`
+had a quarter-metre of hip and thigh skin being dragged sideways by its own arms at only -0.5
+rad. Every pose that moves an arm changed. `standing` is untouched, as it must be — checked
+against the committed file rather than assumed: 12,010 vertices either side, maximum
+coordinate delta **1.19e-7 m**, which is float32 rounding.
+
+### How it works, and why every simpler thing failed
+
+The fix is in two halves, split at the **armpit apex** — which is *measured, not chosen*:
+walking a cut plane down from the measured armpit, the highest cut whose surface splits into
+three large connected components is the apex. At z=1.214 the mesh separates into a
+3,869-node body and two 1,129-node arms, symmetric to the node. The same code finds 1,153+1,153
+on the female figure. A wrong cut yields one component or a hundred, so the method self-checks.
+
+- **Below the apex** an arm touches nothing — it meets the body only at the shoulder — so
+  connectivity alone identifies it. Any *non-arm* vertex there loses its arm-bone weight to
+  the nearest bone it is allowed to have.
+- **Above the apex** arm and torso are one surface and connectivity says nothing, so the rule
+  switches to nearest-bone: a vertex nearer `spine`/`neck` than `upperarm` is trapezius or
+  upper chest and must not swing with the arm. This is the half that stops the shoulder cap
+  folding *through* the torso — a large dark wedge across the trapezius, still present after
+  the below-apex half was working.
+
+**The correction is one-directional, and that is load-bearing.** Only non-arm vertices are
+touched, and only their arm weight. Arm vertices keep their share of `spine` across the
+shoulder — that blend is what holds the arm on. Enforcing the partition both ways detaches the
+upper arms and floats them away.
+
+**Five approaches that failed, with the measurements that killed them.** Do not retry these:
+
+1. **Weight smoothing** (`vertex_group_smooth`). Changed 10,857 of 12,010 vertices and left
+   the curtains untouched: a large contiguous region on the wrong bone stays wrong when
+   averaged with itself. Re-tested after the partition was correct and it earned nothing
+   there either — the shoulder crease is fixed by the above-apex rule, not by smoothing — so
+   it is **not** in the pipeline. It only blurs the elbow and knee creases.
+2. **`widest_gap` separation.** Fixed the ribcage flank only, 287 vertices.
+3. **Nearest-bone reassignment, everywhere.** Confirms the wrong answer. The figure rests in
+   an **A-pose**, so each arm's inner surface hangs beside the flank, hip and outer thigh:
+   thigh skin is genuinely nearer the arm bone (~2 cm) than its own thigh bone (~9 cm).
+4. **A ball-shaped arm seed at the wrist.** Any radius big enough to hold the hand also holds
+   thigh skin, so the walk floods the leg as "arm" and strips the real arm — figures come out
+   with limp arms and swinging legs.
+5. **Slice-based seeding by x-projection gap, at any threshold.** A horizontal band holds only
+   **11-60 vertices**, so the natural vertex spacing is ~20 mm and both the original 0.02 test
+   and a 0.015 one read that spacing as anatomy. Measured, it labelled centre torso, both
+   thighs and the flank as "arm" (4,759 vertices). A *real* arm/torso gap is 92-181 mm — an
+   order of magnitude clear of the noise, but only where the arm is already obviously clear.
+
+**The trap that wasted the most time, and the one to remember:** a mesh round-tripped through
+`.glb` is **not** one connected component. glTF cannot share a vertex between faces that
+disagree about a normal or UV, so the surface is split along every seam — a naive edge walk
+reaches 6,430 of 12,010 vertices and silently strands the entire region under investigation,
+which then reads as "no region" and gets skipped. `surface_graph()` welds by rounded position
+first: 12,010 vertices become 10,582 nodes and the walk reaches all of them. Any future
+mesh-graph work in this pipeline must weld before walking.
+
+### Still true, still open
+
+- **No live parse.** Still no `ANTHROPIC_API_KEY` here. `poses.json` is now **20 rows** and the
+  parser builds its list from it at require time; whether the model picks 1-of-20 reliably is
+  the thing to watch, and the argument in `docs/proposal-hair-wardrobe-and-more-poses.md` for
+  *not* expanding the library along hair/wardrobe axes gets stronger with every row.
+- **Nothing seen in the viewport** — evidence is Blender/Cycles renders.
+- **What remains at extreme angles** is a small crease in the armpit itself: a static bake with
+  no corrective shapes, doing the only thing it can. Invisible at blocking scale.
+- **Track 1b (asymmetric/off-axis poses) is now unblocked** and is the natural next step — it
+  was sequenced after 1c precisely because asymmetric poses are mostly arm poses.

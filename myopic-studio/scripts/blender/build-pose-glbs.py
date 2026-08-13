@@ -32,6 +32,7 @@
 # Verified by the 10 Aug spike, and re-checkable any time with scripts/measure-glb.mjs.
 
 import sys
+from collections import deque
 from math import pi
 
 import bpy
@@ -68,13 +69,13 @@ FIGURES = {
 # (arms out to the side, a turned head) cannot be expressed here and needs the
 # generalisation described in docs/proposal-hair-wardrobe-and-more-poses.md, track 1b.
 #
-# ARM ANGLES ARE BOUNDED BY THE BIND, NOT BY TASTE. Nothing here raises an arm much past
-# half a radian, and that is a hard limit rather than a stylistic choice: automatic
-# (bone-heat) weighting hands the arm bones a band of hip, outer thigh and flank — measured,
-# 2,300 vertices — because the hands rest against the thighs in the source mesh's rest
-# pose. Raise an arm and that band follows it, dragging a curtain of triangles behind it.
-# The four original poses keep their arms low and never expose it. See STATE.md
-# "Pose library, second batch" before adding a pose that lifts an arm.
+# ARM ANGLES ARE NO LONGER BOUNDED. Until 13 August the table carried a hard ceiling of
+# about half a radian on `armForward`, because automatic weighting handed the arm bones a
+# band of hip, outer thigh and flank and raising an arm dragged that band along as a curtain
+# of triangles. `resolve_arm_bleed` fixes it at the source, and the sweep that proved it
+# runs to -3.0 rad — arms straight overhead — clean. What remains at extreme angles is a
+# small crease in the armpit itself, which is a static bake with no corrective shapes doing
+# the only thing it can, and is invisible at blocking scale.
 POSES = {
     'standing': {},
     'sitting': {'thighForward': -pi / 2, 'kneeBend': pi / 2, 'armForward': -0.5, 'elbowBend': -0.4},
@@ -102,6 +103,13 @@ POSES = {
     # the spine and neck.
     'slumped': {'torsoBend': 0.7, 'headTilt': 0.4, 'thighForward': -0.2, 'kneeBend': 0.35,
                 'armForward': 0.1},
+
+    # --- added 13 August 2026, once the arm ceiling was lifted. This is the pose that was
+    # built and cut on 12 August; it is the reason `resolve_arm_bleed` exists.
+
+    # Hands overhead — surrender, reaching a high shelf, a crowd. Held a little short of
+    # vertical so the arms read as raised rather than as a flagpole.
+    'arms-raised': {'armForward': -2.7, 'elbowBend': -0.15},
 }
 
 
@@ -286,12 +294,185 @@ def build_armature(obj, m):
     return rig
 
 
-def bind(obj, rig):
+ARM_BONES = ('upperarm.L', 'upperarm.R', 'forearm.L', 'forearm.R')
+
+
+
+def point_segment_distance(p, a, b):
+    """Distance from p to the segment ab — a bone's whole extent, not just its head."""
+    ab = b - a
+    denom = ab.dot(ab)
+    t = 0.0 if denom == 0 else max(0.0, min(1.0, (p - a).dot(ab) / denom))
+    return (p - (a + ab * t)).length
+
+
+def surface_graph(obj):
+    """The mesh as a graph, with coincident vertices welded into one node.
+
+    WELDING IS NOT OPTIONAL, and skipping it breaks everything downstream silently. glTF
+    cannot share a vertex between faces that disagree about a normal or a UV, so a round
+    trip through .glb splits the surface along every such seam: the imported mesh looks
+    watertight and is actually a pile of disconnected shells. Measured on this figure, a
+    naive edge walk reaches 6,430 of 12,010 vertices. Welding by position restores the
+    surface as a graph and touches no geometry — 12,010 vertices become 10,582 nodes.
+    """
+    node, node_of = {}, []
+    for v in obj.data.vertices:
+        node_of.append(node.setdefault(tuple(round(c, 6) for c in v.co), len(node)))
+    adjacency = [set() for _ in range(len(node))]
+    for e in obj.data.edges:
+        a, b = node_of[e.vertices[0]], node_of[e.vertices[1]]
+        if a != b:
+            adjacency[a].add(b)
+            adjacency[b].add(a)
+    return node_of, adjacency
+
+
+def components_below(adjacency, height_of, ceiling, minimum=80):
+    """Connected components of the surface below `ceiling`, largest first."""
+    below = {n for n in range(len(adjacency)) if height_of[n] < ceiling}
+    seen, out = set(), []
+    for start in below:
+        if start in seen:
+            continue
+        queue, comp = deque([start]), []
+        seen.add(start)
+        while queue:
+            i = queue.popleft()
+            comp.append(i)
+            for j in adjacency[i]:
+                if j in below and j not in seen:
+                    seen.add(j)
+                    queue.append(j)
+        if len(comp) >= minimum:
+            out.append(comp)
+    out.sort(key=len, reverse=True)
+    return out
+
+
+def arm_vertices(obj, m):
+    """The two arms, found by cutting the surface rather than by measuring distances.
+
+    Below the armpit crease an arm touches nothing: it meets the body only at the shoulder.
+    So the highest cut that splits the surface into THREE large pieces is the armpit apex,
+    and the two smaller pieces are the arms. No threshold, no tuning, no anatomy assumed
+    beyond "arms hang off shoulders" — and it self-checks, because a wrong cut yields one
+    piece or a hundred rather than a clean symmetric three.
+
+    WHY NOTHING GEOMETRIC WORKS HERE, since three attempts died on it. The figure rests in
+    an A-pose, so the inner surface of each arm hangs alongside the flank, hip and outer
+    thigh — the very vertices that must NOT follow the arm. Distance cannot tell them apart:
+    a thigh-surface vertex is nearer the arm bone than its own thigh bone. Nor can slicing:
+    a horizontal band holds only 11-60 vertices, so the natural vertex spacing is about
+    20 mm, and any x-projection gap test at a 15-20 mm threshold reads that spacing as
+    anatomy. Measured, that mislabels the whole torso and both thighs as "arm". A real
+    arm/torso gap is 92-181 mm, an order of magnitude clear of the noise — but only where
+    the arm is clear of the body at all, which is exactly where the answer was never in
+    doubt. Connectivity has none of these failure modes.
+    """
+    node_of, adjacency = surface_graph(obj)
+    world = world_verts(obj)
+    height_of = [0.0] * len(adjacency)
+    for v in obj.data.vertices:
+        height_of[node_of[v.index]] = world[v.index].z
+
+    # Walk down from the measured armpit, which sits a little above the true crease — its
+    # own scan uses a 20 mm gap threshold, i.e. the noise floor described above.
+    ceiling = m['armpit']
+    while ceiling > m['crotch']:
+        comps = components_below(adjacency, height_of, ceiling)
+        if len(comps) >= 3:
+            arms = set(comps[1]) | set(comps[2])
+            print(f'BIND armpit apex at z={ceiling:.3f}; arms are {len(comps[1])}+{len(comps[2])} '
+                  f'nodes against a {len(comps[0])}-node body')
+            return {v.index for v in obj.data.vertices if node_of[v.index] in arms}, ceiling
+        ceiling -= 0.01
+    raise SystemExit('arm_vertices: the surface never split into three below the armpit. '
+                     'Either the figure is not in an A- or T-pose, or the mesh is not '
+                     'watertight enough to weld — see surface_graph().')
+
+
+def resolve_arm_bleed(obj, rig, m):
+    """Take the flank, hip and outer thigh back off the arm bones.
+
+    THE DEFECT, measured before it was fixed: automatic (bone-heat) weighting assigns by
+    proximity, and in an A-pose the arms hang beside the body, so the arm bones are handed
+    a band of torso and leg — 2,300 vertices whose rest positions run y=0.435 (mid-thigh)
+    to y=1.060 (waist), at x = +/-0.18, just inboard of the arm surface at 0.187.
+
+    It stays invisible while the arms stay down, which is why the first four poses never
+    exposed it: `crouching` swings them to -1.0 rad and the distortion hides in the hunch.
+    Raise an arm and that band follows it, dragging a curtain of triangles — a web from the
+    hands to the knees at -1.2 rad, two metre-long spikes beside the head at -2.7.
+
+    THE CORRECTION IS ONE-DIRECTIONAL, and that is load-bearing. Only non-arm vertices are
+    touched, and only their arm weight. Arm vertices keep every gram bone heat gave them,
+    including their share of `spine` across the shoulder — that blend is what holds the arm
+    on. Enforcing the partition in both directions instead severs the figure: the upper arms
+    detach and float away, which is exactly what an earlier attempt did.
+
+    Above the apex nothing is touched at all, because the deltoid and shoulder cap genuinely
+    do share weight between `upperarm` and `spine`.
+    """
+    arms, apex = arm_vertices(obj, m)
+    groups = {vg.name: vg for vg in obj.vertex_groups}
+    keep = [n for n in groups if n not in ARM_BONES]
+    segments = {n: (rig.data.bones[n].head_local.copy(), rig.data.bones[n].tail_local.copy())
+                for n in groups}
+    world = world_verts(obj)
+
+    moved = 0
+    for v in obj.data.vertices:
+        co = world[v.index]
+        if v.index in arms:
+            continue
+        if co.z >= apex:
+            # ABOVE THE APEX the arm and torso are one surface, so connectivity says
+            # nothing and the question changes: how much of the shoulder shelf belongs to
+            # the arm? Here distance is trustworthy, because the adversarial case that
+            # defeats it below — an arm hanging alongside a thigh — does not exist up top.
+            # A vertex nearer the spine or neck than the upperarm is trapezius or upper
+            # chest, and must not swing with the arm; leaving it arm-weighted folds the
+            # shoulder cap straight through the torso when the arm goes overhead.
+            near_arm = min(point_segment_distance(co, *segments[n]) for n in ARM_BONES
+                           if n in segments)
+            near_core = min(point_segment_distance(co, *segments[n]) for n in ('spine', 'neck')
+                            if n in segments)
+            if near_arm <= near_core:
+                continue  # deltoid and shoulder cap: the blend here is real, leave it
+        member = {gr.group: gr.weight for gr in v.groups}
+        bleed = 0.0
+        for name in ARM_BONES:
+            vg = groups.get(name)
+            if vg is None or vg.index not in member:
+                continue
+            bleed += member[vg.index]
+            vg.remove([v.index])
+        if bleed > 0:
+            # Give it to the nearest bone it is allowed to have. Deleting the weight instead
+            # would leave some vertices with none at all, and a vertex with no weight does
+            # not follow the body — it tears in its own way.
+            home = min(keep, key=lambda n: point_segment_distance(co, *segments[n]))
+            groups[home].add([v.index], bleed, 'ADD')
+            moved += 1
+    print(f'BIND moved arm-bone weight off {moved} body vertices')
+
+
+def bind(obj, rig, m):
     bpy.ops.object.select_all(action='DESELECT')
     obj.select_set(True)
     rig.select_set(True)
     bpy.context.view_layer.objects.active = rig
     bpy.ops.object.parent_set(type='ARMATURE_AUTO')
+
+    # NO WEIGHT SMOOTHING. `vertex_group_smooth` was tried here at several strengths and
+    # earns nothing: it does not touch the bleed (a large contiguous region assigned to the
+    # wrong bone stays wrong when averaged with itself — measured, it changed 10,857 of
+    # 12,010 vertices and left the curtains intact), and it does not clear the shoulder
+    # crease either, which `resolve_arm_bleed`'s above-apex rule does. It only blurs the
+    # elbow and knee creases that make a bent limb read as bent.
+
+    resolve_arm_bleed(obj, rig, m)
 
 
 def rotate_x(rig, bone_name, angle):
@@ -502,7 +683,7 @@ def main():
         print(f'LANDMARKS[{label}] ' + '  '.join(f'{k}={v:.3f}' for k, v in m.items()))
 
         rig = build_armature(obj, m)
-        bind(obj, rig)
+        bind(obj, rig, m)
 
         for name, pose in POSES.items():
             apply_pose(rig, pose)
