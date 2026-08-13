@@ -2396,3 +2396,46 @@ and nothing else, so a coat stays tubular in `lying`. Check all four poses, not 
 
 **Still not done:** the garments. `GARMENT_FIGURES` stays empty and the library keeps its
 eight rows until they are modelled. The hair half of v1.10 is unblocked.
+
+---
+
+## Coarse hair in the pipeline (2026-08-13): PRD §11 v1.10 hair half, BUILT
+
+**The half of v1.10 that needed no asset**, so it shipped while wardrobe waits on garments.
+`build-pose-glbs.py` gains a `HAIR` table — suffix → `bare` | `cropped` | `gathered`, with
+`cropped` the default so a new roster row never silently ships bald — and `build_hair()`
+derives the geometry.
+
+**A fitted ellipsoid, not an offset copy of the scalp.** Duplicating skull faces and pushing
+them along their normals produces a **crown of spikes**: the head is the densest part of the
+mesh, so a per-vertex offset amplifies every bump and the band's cut edge shows as a ragged
+fringe. A primitive scaled to the head's own measured half-extents has neither problem, and
+a silhouette is the right level of description for what §11 admits anyway.
+
+**Cut the face out HIGH.** The cut is the entire point of the feature — it is what gives a
+symmetric skull a front and a back, and eyeline is a blocking question. Cutting near the jaw
+leaves a ring framing the face that renders as a **bonnet**; cutting at 0.62 of the head's
+depth below the crown reads as a hairline.
+
+**Bone-parented to the head, not skinned.** Hair rides the skull; it does not deform.
+Automatic weighting on a detached shell sitting near the head, neck and spine bones can
+smear it across all three. `bake_and_export()` freezes either route the same way — it clears
+the parent and keeps the evaluated world matrix — so this needed no export change.
+
+**`facing()` is now in the pipeline**, with both failed versions written into its docstring:
+the bbox-midline test is a tautology, and the centroid test loses to the face's own vertex
+density. The pipeline previously took −Y on faith from the 10 Aug spike's measurement of one
+bundle; it now measures per figure, which is what a third figure would need anyway.
+
+**Verified** through `spike-pipeline-smoke.py`: twelve outputs, all grounded, hair present
+and attached in all four poses including `lying`, where it rotates with the head to sit
+behind it on the floor. Deltas are what they should be — standing height 1.6900 → 1.7120
+(the cap), and the gathered figure's depth extends 21 mm rearward (the bun) and 9 mm forward
+(the cap on the forehead) — measured against the committed library rather than eyeballed.
+
+**The committed `.glb`s are NOT regenerated**, and this is the one thing to know before
+believing the app shows any of it. Regenerating needs the CC0 bundle, which is unreachable
+from this environment (blender.org is blocked by the agent proxy). **The library's figures
+stay bald until `npm run build:poses` runs on a machine with the bundle present.** The
+stand-in bodies used for verification are already-posed library exports, so they cannot
+stand in for that run: re-posing them would double-pose every non-standing figure.

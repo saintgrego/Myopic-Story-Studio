@@ -34,6 +34,7 @@
 import sys
 from math import pi
 
+import bmesh
 import bpy
 from mathutils import Matrix, Vector
 
@@ -66,6 +67,26 @@ FIGURES = {
 GARMENT_FIGURES = {
     # '-coat': ('GEO-body_male_realistic', ('GARMENT-coat_long',)),
 }
+
+# Coarse hair silhouette per figure (PRD §11 v1.10): suffix → 'bare' | 'cropped' | 'gathered'.
+#
+# THIS IS THE WHOLE OF WHAT v1.10 ADMITS ABOUT HAIR, and the amendment concedes most of the
+# argument to get it: hair is where "does this look real" lives, and strands, cards,
+# transparency, physics and colour are all named on the out-list. What survives §11's
+# blocking test is head SHAPE — a bare skull is symmetric front-to-back, so at 35 m it gives
+# a director no cue which way a figure is looking, and eyeline is a blocking question.
+#
+# The two styles differ in silhouette, not in detail, and they also separate the two figures
+# a little further, which is the v1.8 argument one level down.
+# A figure with no row here gets 'cropped' rather than 'bare': v1.10 gives coarse hair to
+# every figure in the roster, so a new row in GARMENT_FIGURES should not silently ship bald.
+HAIR = {
+    '': 'cropped',
+    '-female': 'gathered',
+}
+
+HAIR_OFFSET = 0.011   # how far the cap stands off the skull, metres
+BUN_RADIUS = 0.062
 
 # Reused verbatim from the placeholder generator's POSES table, whose angles were
 # validated in the viewport over several milestones. The joint set below is the same one
@@ -180,6 +201,110 @@ def measure(obj):
 
     return {'floor': z0, 'top': z1, 'height': height, 'crotch': crotch, 'ankle': ankle,
             'knee': knee, 'armpit': armpit, 'neck': neck}
+
+
+def facing(obj, m):
+    """Which way the figure faces, as a sign on y. The bundle's meshes face -Y.
+
+    Measured rather than assumed, and the measurement is not the obvious one. Two plausible
+    tests were tried against real figure geometry and both reported the wrong sign:
+
+    1. "Which extreme overhangs the head's bbox midline further" is a TAUTOLOGY — mid is
+       (min+max)/2, so the two distances are equal by construction.
+    2. "The centroid sits behind the bbox centre, because a skull is a volume and a nose is
+       a spike" is a real argument and still wrong here: the face carries eyes, nose and
+       lips, so its vertices outnumber the cranium's and drag the centroid forward.
+
+    That same density is the signal, used directly. Measured on a library figure: ~1,000
+    vertices per 2 cm slice at the face against ~60 at the back of the skull. Both wrong
+    versions produced exactly one symptom — a hair bun on the figure's face — which no
+    grounding or bounding-box check would ever catch. See STATE.md, "Derived-garment spike".
+    """
+    head = [v for v in world_verts(obj) if v.z > m['neck']]
+    ys = [v.y for v in head]
+    lo, hi = min(ys), max(ys)
+    quarter = (hi - lo) * 0.25
+    front = len([y for y in ys if y < lo + quarter])
+    back = len([y for y in ys if y > hi - quarter])
+    return -1.0 if front > back else 1.0
+
+
+def build_hair(obj, m, style):
+    """Coarse hair silhouette: a cap fitted to the head, optionally with a gathered mass.
+
+    THE CAP IS A FITTED ELLIPSOID, NOT AN OFFSET COPY OF THE SCALP. Deriving it by
+    duplicating skull faces and pushing them along their normals produces a crown of spikes:
+    the head is the densest, most detailed part of the mesh, so a per-vertex offset amplifies
+    every bump in it, and the band's cut edge shows as a ragged fringe. A fitted primitive
+    has neither problem and is the right level of description for a silhouette anyway.
+
+    Returned unbound and unparented; main() parents these to the head bone.
+    """
+    if style == 'bare':
+        return []
+
+    front = facing(obj, m)
+    head_h = m['top'] - m['neck']
+    head = [v for v in world_verts(obj) if v.z > m['neck'] + head_h * 0.25]
+    cx = (min(v.x for v in head) + max(v.x for v in head)) / 2
+    cy = (min(v.y for v in head) + max(v.y for v in head)) / 2
+    half_x = (max(v.x for v in head) - min(v.x for v in head)) / 2
+    half_y = (max(v.y for v in head) - min(v.y for v in head)) / 2
+    crown = m['top']
+
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=1.0, segments=32, ring_count=16,
+                                         location=(cx, cy, crown - half_y * 0.86))
+    cap = bpy.context.active_object
+    cap.name = 'hair-cap'
+    cap.scale = (half_x + HAIR_OFFSET, half_y + HAIR_OFFSET, half_y * 0.96 + HAIR_OFFSET)
+    bpy.ops.object.transform_apply(scale=True)
+
+    # Cut the face out of the cap. This is the asymmetry the whole feature exists for — it
+    # is what gives a symmetric skull a front and a back at 35 mm. Cut HIGH: near the jaw it
+    # leaves a ring framing the face, which renders as a bonnet rather than a hairline.
+    bm = bmesh.new()
+    bm.from_mesh(cap.data)
+    face_cut = cy + front * half_y * 0.34
+    drop = [f for f in bm.faces
+            if (cap.matrix_world @ f.calc_center_median() - Vector((0, face_cut, 0))).y * front > 0
+            and (cap.matrix_world @ f.calc_center_median()).z < crown - half_y * 0.62]
+    bmesh.ops.delete(bm, geom=drop, context='FACES')
+    bm.to_mesh(cap.data)
+    bm.free()
+    cap.modifiers.new('solidify', 'SOLIDIFY').thickness = 0.012
+    pieces = [cap]
+
+    if style == 'gathered':
+        bpy.ops.mesh.primitive_uv_sphere_add(
+            radius=BUN_RADIUS, segments=20, ring_count=12,
+            location=(cx, cy - front * (half_y + BUN_RADIUS * 0.45),
+                      m['neck'] + head_h * 0.62))
+        bun = bpy.context.active_object
+        bun.name = 'hair-bun'
+        pieces.append(bun)
+    return pieces
+
+
+def parent_to_head(objs, rig):
+    """Rigid-parent hair to the head bone instead of skinning it to the whole rig.
+
+    Automatic weighting is right for a body and wrong for hair: hair does not deform, it
+    RIDES the skull, and bone-heat weighting on a detached shell near several bones can
+    smear it across the neck and spine. Bone parenting is both more robust and more honest
+    about what the geometry is. bake_and_export() freezes it the same way either route —
+    it clears the parent and keeps the evaluated world matrix.
+    """
+    if not objs:
+        return
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.mode_set(mode='POSE')
+    rig.data.bones.active = rig.data.bones['head']
+    for o in objs:
+        o.select_set(True)
+    rig.select_set(True)
+    bpy.ops.object.parent_set(type='BONE')
+    bpy.ops.object.mode_set(mode='OBJECT')
 
 
 def limb_x(obj, z, tol=0.02):
@@ -494,11 +619,15 @@ def main():
 
         rig = build_armature(obj, m)
         pieces = [obj] + load_garments(garment_blend, garments, shift)
+        hair = build_hair(obj, m, HAIR.get(suffix, 'cropped'))
         # Every piece binds to the same rig with the same automatic weighting. Proven on a
         # placeholder garment through a seated pose before this path was written — see
         # STATE.md, "Garment deform spike".
         for piece in pieces:
             bind(piece, rig)
+        # Hair rides the skull rather than deforming, so it is bone-parented, not skinned.
+        parent_to_head(hair, rig)
+        pieces += hair
 
         for name, pose in POSES.items():
             apply_pose(rig, pose)
