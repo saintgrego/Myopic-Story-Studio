@@ -2266,3 +2266,71 @@ Non-goal #7 is untouched — a garment is static geometry in a static pose.
 **Not yet done, in order:** the derived-garment spike in Blender (one export, checked for
 `min.y = 0`, +Z facing, and readability at 35mm) before any roster rows are written. v1.2
 and v1.7 both proved the mechanism before the library grew; this should too.
+
+---
+
+## Derived-garment spike (2026-08-13): FAILED, and the failure is structural
+
+**The question**, set by PRD §11 v1.10's "prove before scoping" step: can wardrobe and hair
+be **derived** from the body mesh the pose pipeline already has, instead of taken from a
+second upstream asset? **Answer: hair yes, wardrobe no.** Four iterations, four distinct
+failures, one root cause. `scripts/blender/spike-garment.py` and `spike-render.py` are the
+reproduction; both are committed, neither is pipeline code.
+
+**The root cause, which is worth more than the four symptoms.** A derived garment knows
+only **distance from a vertical axis**, and a standing figure is not radial. Sleeves need
+the arm's own axis and trousers need each leg's. Building those means a limb-aware garment
+builder driven by the rig — writing a garment modeller, not extending a pipeline.
+
+| iteration | method | what rendered |
+| --- | --- | --- |
+| 1 | band-duplicate + solidify (the method the amendment specified) | pectorals, abs and a navel **through** the coat — the shell is a parallel copy of the body; plus a horizontal barrel at the hips and a spiked crown |
+| 2 | silhouette loft, per-sector max radius | the barrel again, traced to the **hands**: at hip height the widest thing in the slice is the knuckles, ~2× the torso radius |
+| 3 | median clamp + angular/vertical smoothing | clean, legible — and a **sack that swallows the arms**, losing the body language v1.7 bought the figures for |
+| 4 | skirt only, waist down (the narrow claim: the body IS radial there) | a stiff bell that **buries the hands inside it**, because the hands hang at exactly that height |
+
+**Two failed facing tests, both plausible, both wrong.** Front/back matters because the hair
+cap is cut back from the face. (a) "Which extreme overhangs the head's bbox midline further"
+is a **tautology** — mid is (min+max)/2, so the distances are equal by construction and the
+comparison always takes its else branch. (b) "The centroid sits behind the bbox centre,
+because a skull is a volume and a nose is a spike" is a real argument and still wrong here:
+the face carries eyes, nose and lips, so its **vertices** outnumber the cranium's and drag
+the centroid forward. What works is that density used directly — sliced front-to-back,
+~1,000 verts per 2 cm slice at the face against ~60 at the back. Both wrong versions
+produced exactly one symptom: **a hair bun on the figure's face**, invisible in any number
+that was being checked. Grounding and bbox both looked fine throughout.
+
+**The app's convention re-confirmed by independent measurement**, since the spike depended
+on it: `standing.glb` faces **+Z** — dense facial geometry at +Z (1,016 verts in the 0.08–0.10
+slice vs 56 at −0.08), toes at +Z, heel at −0.14. In Blender after glTF import that is −Y,
+matching what `build-pose-glbs.py` documents.
+
+**Hair did land, and is the one part of v1.10 that can proceed.** A fitted ellipsoid scaled
+to the head's own half-extents, cut back from the face **high** (near the jaw it leaves a
+ring framing the face and renders as a bonnet), plus a gathered mass at the back. Deriving
+the cap by duplicating scalp faces and pushing them along their normals produced a **crown
+of spikes** — the head is the densest part of the mesh, so a per-vertex offset amplifies
+every bump and the cut edge shows as a ragged fringe. A fitted primitive is both more robust
+and the right level of description for a silhouette.
+
+**Costs measured, against the amendment's estimates.** Derived output ran 635 KB–1.14 MB per
+figure against `standing.glb`'s 512 KB — so v1.10's "~2 MB per figure, ~12 MB at the cap of
+six" would have been **2–4× light**. Whatever garment source is chosen, re-measure before
+trusting the cap.
+
+**Environment notes for anyone re-running this** (nothing here is in the repo's toolchain):
+Blender came from `apt` (4.0.2) and needs `python3-numpy` installed separately or the glTF
+importer dies at `import numpy`. **EEVEE cannot render headless** — it wants a GL context and
+fails on `libEGL.so.1`; Cycles on CPU works. The Ubuntu build ships **without**
+OpenImageDenoise, so `use_denoising` must be off. Blender 4.x renamed the Principled BSDF's
+`Specular` socket to `Specular IOR Level`. The real pipeline input — the CC0 bundle — was
+**not reachable** (blender.org is blocked by the agent proxy), so the spike derived against
+the committed pose library, which is that bundle's own output. The one thing that cannot
+test: whether a garment built **before** posing deforms correctly **with** the body.
+
+**Consequence for PRD §11 v1.10**, recorded there: the "derived from the base mesh" decision
+is marked superseded by measurement, garment derivation is struck from the authorized list,
+and the wardrobe half is **blocked on an asset-source decision** — v1.7's MakeHuman-style
+fallback, now the live path, and section 9's asset question reopening for wardrobe (v1.7
+closed it for bodies only). The roster cap, the naming rule, and the mesh-is-the-figure
+decision are untouched by any of this.
