@@ -64,10 +64,9 @@ FIGURES = {
 # `torsoBend`/`headTilt` leans forward. `sitting` is the worked example — its thighs come
 # forward on -pi/2 and its shins drop back down on +pi/2.
 #
-# Every entry is symmetric: `apply_pose` writes each named angle to both .L and .R.
-# Asymmetric posture (walking, pointing, a hand on one hip) and anything off the x axis
-# (arms out to the side, a turned head) cannot be expressed here and needs the
-# generalisation described in docs/proposal-hair-wardrobe-and-more-poses.md, track 1b.
+# Entries may be symmetric aliases or explicit per-bone turns; see `apply_pose` and
+# `JOINT_ALIASES`. Until 13 August only symmetric, x-axis aliases existed, which is why
+# every pose above this line is a forward/back bend.
 #
 # ARM ANGLES ARE NO LONGER BOUNDED. Until 13 August the table carried a hard ceiling of
 # about half a radian on `armForward`, because automatic weighting handed the arm bones a
@@ -475,8 +474,8 @@ def bind(obj, rig, m):
     resolve_arm_bleed(obj, rig, m)
 
 
-def rotate_x(rig, bone_name, angle):
-    """Rotate a bone by `angle` about the world x axis, pivoting on its own head.
+def rotate(rig, bone_name, axis, angle):
+    """Rotate a bone by `angle` about a world axis, pivoting on its own head.
 
     Posing in world terms rather than bone-local terms is what lets the POSES table stay
     readable ("thigh forward 1.6 rad") regardless of how each bone happens to be rolled.
@@ -487,34 +486,92 @@ def rotate_x(rig, bone_name, angle):
     only correct for unparented bones. It silently pivots every child bone about the
     armature origin instead of its own joint: it put the seated figure's feet 1.4 m in
     front of its hips, which reads as a broken pose rather than a broken pivot.
+
+    Took an axis argument on 13 August (track 1b); it was hard-coded to 'X' before, which
+    is why every pose until then was a forward/back bend.
     """
     if not angle:
         return
     pb = rig.pose.bones[bone_name]
     head = pb.matrix.to_translation()
-    about_head = Matrix.Translation(head) @ Matrix.Rotation(angle, 4, 'X') @ Matrix.Translation(-head)
-    pb.matrix = about_head @ pb.matrix
+    about = Matrix.Translation(head) @ Matrix.Rotation(angle, 4, axis) @ Matrix.Translation(-head)
+    pb.matrix = about @ pb.matrix
+
+
+# Friendly joint names → (bone, world axis, mirrored). `{s}` expands to both sides.
+#
+# MIRRORED is the part that is not guessable. The figure is symmetric about x, so a
+# rotation in the SAGITTAL plane (about x — every joint the pipeline had before today)
+# takes the same signed angle on both sides: both thighs swing forward together. A rotation
+# that leaves that plane does not. Swinging both arms away from the body means +y on one
+# side and -y on the other, so those aliases carry the sign flip and the table stays
+# readable as "arms out 0.4" rather than "+0.4 left, -0.4 right".
+JOINT_ALIASES = {
+    'torsoBend':    ('spine', 'X', False),
+    'torsoTwist':   ('spine', 'Z', False),
+    'headTilt':     ('head', 'X', False),
+    'headTurn':     ('head', 'Z', False),
+    'thighForward': ('thigh.{s}', 'X', False),
+    'thighOut':     ('thigh.{s}', 'Y', True),
+    'kneeBend':     ('shin.{s}', 'X', False),
+    'armForward':   ('upperarm.{s}', 'X', False),
+    'armOut':       ('upperarm.{s}', 'Y', True),
+    'elbowBend':    ('forearm.{s}', 'X', False),
+}
+
+# Strictly proximal → distal. Rotating a parent moves its children's heads, and `rotate`
+# reads that head off `pb.matrix`; out of order, the shin pivots about where the knee used
+# to be. Adding a bone here means thinking about where it belongs in the chain.
+BONE_ORDER = ('spine', 'neck', 'head',
+              'thigh.L', 'shin.L', 'foot.L', 'upperarm.L', 'forearm.L',
+              'thigh.R', 'shin.R', 'foot.R', 'upperarm.R', 'forearm.R')
 
 
 def apply_pose(rig, pose):
+    """Drive the rig from one POSES entry.
+
+    Two ways to name a rotation, and they compose:
+
+      'armForward': -0.5              a symmetric alias, applied to both sides
+      'upperarm.R': ('Z', -1.2)       one bone, one axis, exactly as written
+      'forearm.R': [('X', -0.3), ...] several turns on one bone
+
+    An explicit bone entry is applied AFTER any alias touching the same bone, so a pose can
+    say "both arms forward a little, and the right one also out and round" without having
+    to spell out the left. Explicit entries are never mirrored: you named the side.
+    """
     for pb in rig.pose.bones:
         pb.matrix_basis = Matrix()
     bpy.context.view_layer.update()
 
-    # Strictly proximal → distal, with an update between each: rotating a parent moves
-    # its children's heads, and `pb.matrix` reads that head. Out of order, the shin
-    # pivots about where the knee used to be.
-    def turn(name, angle):
-        rotate_x(rig, name, angle)
-        bpy.context.view_layer.update()
+    turns = {name: [] for name in BONE_ORDER}
+    for alias, value in pose.items():
+        if alias not in JOINT_ALIASES:
+            continue
+        template, axis, mirrored = JOINT_ALIASES[alias]
+        for side in ('L', 'R'):
+            bone = template.format(s=side)
+            if bone not in turns:
+                continue
+            # Mirrored aliases negate on the LEFT, not the right. Checked by rendering, not
+            # derived: the first version negated on the right and `armOut: 0.9` folded both
+            # arms across the crotch instead of spreading them. A limb that hangs down and
+            # slightly out needs a NEGATIVE turn about y to swing further out on the +x
+            # side, so left is the side that carries the flip if the name is to stay true.
+            sign = -1 if (mirrored and side == 'L') else 1
+            turns[bone].append((axis, value * sign))
+            if '{s}' not in template:
+                break  # a centreline bone: apply once, not once per side
+    for bone in BONE_ORDER:
+        explicit = pose.get(bone)
+        if explicit is None:
+            continue
+        turns[bone].extend([explicit] if isinstance(explicit, tuple) else list(explicit))
 
-    turn('spine', pose.get('torsoBend', 0))
-    turn('head', pose.get('headTilt', 0))
-    for side in ('L', 'R'):
-        turn(f'thigh.{side}', pose.get('thighForward', 0))
-        turn(f'shin.{side}', pose.get('kneeBend', 0))
-        turn(f'upperarm.{side}', pose.get('armForward', 0))
-        turn(f'forearm.{side}', pose.get('elbowBend', 0))
+    for bone in BONE_ORDER:
+        for axis, angle in turns[bone]:
+            rotate(rig, bone, axis, angle)
+            bpy.context.view_layer.update()
 
 
 # ---------------------------------------------------------------- export
@@ -522,6 +579,12 @@ def apply_pose(rig, pose):
 
 def bake_and_export(obj, rig, pose, path):
     """Freeze the posed mesh into static geometry, ground it, write the .glb."""
+    # The posed pelvis, captured before any of the transforms below move `baked` around.
+    # The rig sits at the origin and the mesh carries no transform of its own at this
+    # point, so armature space, world space and the baked mesh's local space coincide —
+    # which is what lets this one point be pushed through `baked.matrix_world` later.
+    pelvis_local = rig.pose.bones['spine'].matrix.to_translation()
+
     baked = obj.copy()
     baked.data = obj.data.copy()
     bpy.context.collection.objects.link(baked)
@@ -548,10 +611,16 @@ def bake_and_export(obj, rig, pose, path):
     bpy.context.view_layer.update()
     lo = min((baked.matrix_world @ v.co).z for v in baked.data.vertices)
     baked.location.z -= lo
-    # Centre on the origin in plan, so position.x/z in a scene mean what they say.
+    # Centre on the PELVIS in plan, so position.x/z in a scene mean what they say.
+    #
+    # Not on the bounding box, which is what this did until 13 August. The two agree to
+    # four decimal places on every bilaterally symmetric pose — measured across all ten —
+    # so the change is a no-op for the library as it stood. They stop agreeing the moment
+    # a pose is asymmetric: reach one arm out and the bounding box centre slides toward it,
+    # taking the whole body off the origin with it, and a character placed at x=2 stands
+    # somewhere else. The pelvis is the root of the chain and no limb can move it.
     bpy.context.view_layer.update()
-    xs = [(baked.matrix_world @ v.co).x for v in baked.data.vertices]
-    baked.location.x -= (min(xs) + max(xs)) / 2
+    baked.location.x -= (baked.matrix_world @ pelvis_local).x
 
     bpy.ops.object.select_all(action='DESELECT')
     baked.select_set(True)

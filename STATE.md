@@ -2428,3 +2428,48 @@ mesh-graph work in this pipeline must weld before walking.
   no corrective shapes, doing the only thing it can. Invisible at blocking scale.
 - **Track 1b (asymmetric/off-axis poses) is now unblocked** and is the natural next step — it
   was sequenced after 1c precisely because asymmetric poses are mostly arm poses.
+
+---
+
+## Track 1b — the pose machinery goes off-axis (2026-08-13): built, no new poses yet
+
+`apply_pose` can now express asymmetric and off-axis posture. **No pose in the library uses
+it yet** — this is capability, not content, and the shipped 20 `.glb`s are untouched. Probe
+evidence in `docs/poses-asymmetric-probes.png`: a T-pose, a wide stance, a one-arm point, a
+turned head with a twisted torso, and a walk with the legs in opposition. The bind holds on
+every one, including the entirely new lateral axis, with no curtains and no tearing.
+
+Three changes, all inside `build-pose-glbs.py`:
+
+1. **`rotate_x` → `rotate(rig, bone, axis, angle)`.** It was hard-coded to `'X'`, which is
+   the whole reason every pose before today is a forward/back bend.
+2. **`POSES` entries take explicit per-bone turns** beside the friendly symmetric aliases:
+   `'upperarm.R': ('Z', -1.2)`, or a list for several turns on one bone. Explicit entries
+   apply *after* any alias touching the same bone and are never mirrored — you named the
+   side. `BONE_ORDER` keeps the strict proximal→distal application the old loop had.
+3. **Plan-centring moved from the bounding box to the pelvis.** This was the prerequisite
+   nobody would have predicted: the export centred the figure on `(min(x)+max(x))/2`, which
+   coincides with the body only while a pose is bilaterally symmetric. Reach one arm out and
+   the bounding-box centre slides toward it and takes the whole body off the origin — a
+   character placed at `x=2` would stand somewhere else. Measured across all ten postures
+   before changing it, the two origins agree to four decimal places, so the switch is a
+   no-op for the library as it stands; `p-turn`'s asymmetric x bounds (-0.394..+0.449) are
+   the proof it now does something.
+
+**MIRRORED ALIASES NEGATE ON THE LEFT.** `armOut`/`thighOut` carry a sign flip so the table
+can read "arms out 0.9" rather than spelling out both sides, and the flip goes on the *left*.
+The first version put it on the right and `armOut: 0.9` folded both arms across the crotch
+instead of spreading them — caught by rendering it, not by reasoning about it. Sagittal
+aliases (everything about x) take the same signed angle on both sides and are not mirrored.
+
+**Known drift, deliberately not chased:** rebuilding the existing 20 poses through the
+refactored code reproduces them to within **5.4e-4 m** worst case (`crouching`), sagittal
+only — the x translation is preserved to 1.8e-11 m, which is the property the centring change
+had to hold. That is 0.03% of figure height and comes from float accumulation in a re-ordered
+evaluation, not from a behaviour change. The committed binaries were **not** regenerated for
+it: churning 10 MB of assets for half a millimetre is a worse trade than the diff a future
+`npm run build:poses` will show.
+
+**Still open:** the head/neck shows a small dark band under `torsoTwist`, which is the neck
+weighting meeting a twist it has not been asked for before. Worth a look before any pose
+ships a large twist.
