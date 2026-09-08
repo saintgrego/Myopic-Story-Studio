@@ -2301,8 +2301,93 @@ Added `.tmp-*.mjs`, `scripts/.tmp-*.mjs`, `_conflict-review/`. Verified with `gi
 209/12 — not the 151/10 the brief expected. That figure predates #30; the entry above already
 records the move to 209/12.
 
+### The four branches, read rather than counted (2026-09-08, amending the section above)
+
+The table above listed them by size. This is what they contain. **All four were checked out
+and put through all three gates in this container**, so the results below are measured, not
+quoted from their own log entries. **None is stale, and none duplicates work already on
+`main`** — the failure mode of 11 August is not what is happening here.
+
+| branch | gates, as measured | state |
+| --- | --- | --- |
+| `test-coverage-analysis-7g10p3` | tsc clean · **239 / 13** · build ok | complete |
+| `nomad-sculpt-import-h886e5` | tsc clean · 209 / 12 · build ok | complete |
+| `manikin-poses-references-dogqwp` | tsc clean · 209 / 12 · build ok | complete |
+| `section-11-v1-10-amendment-rsx4xx` | tsc clean · 209 / 12 · build ok | **machinery only, 0 of 6 acceptance boxes ticked** |
+
+**`test-coverage-analysis-7g10p3`** — 30 tests over the three fetch wrappers, which were at
+0%. No production code changed. Its teeth were checked by mutation rather than assumed. It
+also *pins* a live inconsistency instead of fixing it: `storyboardApi` throws a fixed string
+and discards the `{ error }` the route actually sends, while `sceneApi` prefers it.
+
+**`nomad-sculpt-import-h886e5`** — a real Nomad Sculpt figure renders with **no app code
+changed**; §4's mesh abstraction and v1.5's custom-asset material exemption already carried
+it. Adds `scripts/normalize-glb.mjs` and `public/assets/custom/`. The asset arrived with its
+origin at the hips (`min.y = −0.92`), and the entry's generalisation is the part worth
+keeping: grounding is the one convention essentially every hand-authored import will get
+wrong. `custom/` is deliberately outside `poses/` — registering it would put the path in
+`LIBRARY_PATHS` and the palette would overwrite the sculpt's own materials.
+
+**`manikin-poses-references-dogqwp`** — the pose library goes **4 poses → 15**, 8 `.glb`s →
+30, both figures. Verified rather than trusted: every one of the 30 `poses.json` rows has a
+binary (`comm` against the tree listing returns empty), and all 30 clear the `min.y = 0`
+assertion. **The flat 209 test count is not evidence the new poses went unchecked** —
+`poses.test.ts` loops *inside* single tests rather than using `test.each`, so the count is
+independent of library size. It also **rewrites `standing.glb` and `standing-female.glb`**:
+the arm-weight skinning fix found the existing poses were wrong too. Paths are unchanged, so
+saved `.myo` files still load; they simply render better. Two poses were cut with stated
+cause rather than shipped soft.
+
+**`section-11-v1-10-amendment-rsx4xx`** — PRD **§11 v1.10**: wardrobe and coarse hair as part
+of the figure identity, roster capped at six. The derived-garment approach was spiked and
+**falsified** (*"a derived garment knows only distance from a vertical axis, and a standing
+figure is not radial"*), and the PRD keeps the dead reasoning marked as overturned rather
+than deleting it. Hair is built and bone-parented to the skull rather than skinned.
+`GARMENT_FIGURES` ships empty. **It touches neither `poses.json` nor a single binary** —
+`git diff --stat main..<branch> -- src/poses.json public/assets/` is empty — so the committed
+figures stay bald until `build:poses` is re-run.
+
+### The collision, and the order it forces
+
+**All four merge cleanly onto `main` individually** (`git merge-tree --write-tree`, no
+conflict on any). Only the two pose branches fight each other: **4 conflict hunks in
+`scripts/blender/build-pose-glbs.py`**, plus STATE.md prose. Measured in a throwaway worktree,
+since removed.
+
+They are **complementary, not duplicative** — manikin does skinning and off-axis posing,
+v1.10 does hair and garment geometry — but both edit the same regions and each changes a
+different function's signature:
+
+1. `args()` — manikin's source-or-directory second argument vs. v1.10's optional third
+   `garments.blend`. Mechanical.
+2. `bake_and_export()` — `(obj, …)` vs. `(objs, …)`. **v1.10's list version is a superset**;
+   take it.
+3. `main()`'s loop — v1.10 changes `load_figure` to return a **tuple** `(obj, shift)`, which
+   manikin's `from_glb` branch has no shift for. Needs care.
+4. `bind()` — manikin's `bind(obj, rig, m)` arm-weight fix vs. v1.10's `for piece in pieces:
+   bind(piece, rig)`. **The one real design question: does the arm-bleed correction apply to
+   a garment, or only to the body it was measured from?**
+
+**Merge order: `test-coverage` and `nomad-sculpt` (independent, either order), then
+`manikin`, then `section-11`.** Manikin goes first for a reason beyond size —
+`load_standing_glb` lets the pipeline run from an already-exported `standing.glb` **instead of
+the 48 MB CC0 bundle**, which is gitignored and whose source is blocked by the agent proxy.
+That is precisely the blocker v1.10 recorded against itself (*"not reachable from the machine
+this was built on"*). Manikin verified the substitution by rebuilding the four original poses
+from `standing.glb` and reproducing them.
+
+**The sequencing trap, stated plainly.** `build:poses` regenerates the library from the
+`POSES` table in the script — 4 rows on `main`, 15 on manikin. **If v1.10 lands first and
+`build:poses` is run to pick up the hair, the export rebuilds a four-pose library while
+`poses.json` still claims thirty**, and `poses.test.ts`'s path→file direction fails on 22
+rows. Manikin must precede any regeneration, not merely any merge.
+
 ### Still to do, on the machine that has the files
 
-Steps 1–4 unchanged, plus the four branches above. Counts of duplicates deleted vs.
-quarantined to `_conflict-review/`, and any duplicate holding real divergent work, belong in
-an amendment to this entry once that sweep runs.
+Steps 1–4 of the brief are unchanged: the conflict-copy table, the three local-branch diffs,
+and the untracked `.myo` triage all need the working copy this session never had. Counts of
+duplicates deleted vs. quarantined to `_conflict-review/`, and any duplicate holding real
+divergent work, belong in a further amendment once that sweep runs.
+
+The four remote branches above are **no longer in that category** — they are read, measured
+and ordered. What remains for them is the merge itself, and hunk 4's design question.
