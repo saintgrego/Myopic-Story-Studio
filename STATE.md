@@ -2219,3 +2219,90 @@ Also still untested: the three fetch wrappers (`lib/parser.ts`, `sceneApi.ts`,
 and `Viewport.tsx`'s remaining extractable pure logic (`isExterior`'s `locationName` fallback,
 `buildObject`'s `mesh.kind` switch, and whether the palette is indexed by scene-array position
 rather than a filtered counter — the exact regression `palette.ts`'s own comment warns about).
+
+## Repo hygiene (2026-09-08): ran on a remote clone, so the sweep could not happen — but four live branches carry unmerged work
+
+**The brief assumed a working copy this session never had.** The hygiene task described
+`~/Documents/MyopicStudio`: 113 untracked cloud-sync conflict copies, four scratch scripts, a
+modified `storyboard.json`, seven untracked `.myo` scenes, and three local branches
+(`camera-aim-height`, `set-pieces`, `prd-v1.7-figure-assets`). This session ran in a Claude
+Code web container against a **fresh clone of `origin/main`**, where none of that exists:
+`git status --porcelain` returned zero lines, `--ignored=traditional` added nothing, a
+`find` for ` <n>.<ext>` names matched **0 files**, and all 8 `.myo` scenes plus
+`storyboard.json` were tracked and unmodified at `HEAD` (`4c5f37a`).
+
+The three local branches are not here and neither are their commits: `git cat-file -t` reports
+`b5c1da3`, `ac1b99f`, `1e18583`, `cf9eacd` and `b866399` as **not valid object names**, and no
+ref matches those branch names. `559b177` and `6482140` — the `main`-side commits the brief
+cited — resolve fine, confirming `main` is intact and only the branch-side history is absent.
+**Steps 1–4 of that brief are local-machine work.** A cloud session cannot see an untracked
+file or an unpushed branch; there is nothing to diff and nothing to sweep.
+
+### What *was* settled, by content
+
+**`ac1b99f` is fully on `main` — the `camera-aim-height` and `set-pieces` branches are not
+protecting it.** Evidence, independent of the commit graph:
+
+- `60ba0e8` ("Aim the shot camera by shot type… (#24)") is an **empty commit** — `git show
+  --stat` lists no files.
+- `046760a` (the same title, #27) carries the real change: `framing.ts` +69, `framing.test.ts`
+  +58, `STATE.md` +42.
+- `main`'s `src/lib/framing.ts` today contains `AIM_FRACTION`, `aimFraction()` and
+  `aimPointForCharacter()` — the shot-type aiming logic itself.
+- The 11 August entry above already recorded this: *"#27 cherry-picked `ac1b99f` onto `main`
+  without noticing PR #24 was already open for exactly that commit; both merged, and #24's
+  squash landed as an empty commit."*
+
+So the branch-deletion question turns only on whether those branches carry **anything else**,
+which has to be answered locally with `git diff main..<branch>`.
+
+### The finding that matters: four *live* remote branches, none in the brief
+
+The brief's remote branch (`origin/claude/set-pieces-schema-viewport-0zq05y`) is gone. Four
+others exist, all **ahead of `main` with zero commits behind it**, none with an open PR
+(`list_pull_requests` returned `[]`):
+
+| branch | ahead | diff vs. `main` |
+| --- | --- | --- |
+| `claude/manikin-poses-references-dogqwp` | 6 | 44 files, +1145 — 6 new pose `.glb`s (slumped, turned-to-listen, walking × both figures), both `standing` binaries rewritten, `build-pose-glbs.py` +434, `poses.json` +114 |
+| `claude/section-11-v1-10-amendment-rsx4xx` | 4 | 10 files, +1393 — a **PRD §11 v1.10 amendment**, `assets-src/README.md`, four Blender spike scripts, `build-pose-glbs.py` +302 |
+| `claude/nomad-sculpt-import-h886e5` | 1 | 3 files, +198 — `scripts/normalize-glb.mjs`, a Nomad Sculpt `.glb` under `public/assets/custom/` |
+| `claude/test-coverage-analysis-7g10p3` | 1 | 2 files, +312 — `src/__tests__/apiClients.test.ts` |
+
+This is the same shape as the 11 August failure — *"the branch list was on screen before #25
+was opened; it was read as names, not as work."* Two of these touch
+`scripts/blender/build-pose-glbs.py` and would conflict with each other; one proposes a PRD
+amendment. **None of them is safe to treat as stale on commit count alone.**
+
+### `.gitignore`, and the one pattern that does nothing
+
+Added `.tmp-*.mjs`, `scripts/.tmp-*.mjs`, `_conflict-review/`. Verified with `git check-ignore
+-v` rather than assumed:
+
+- `.tmp-*.mjs` (no slash, so it matches a basename at any depth) catches **all three** dotted
+  scratch scripts, `myopic-studio/scripts/.tmp-measure2.mjs` included.
+- **`scripts/.tmp-*.mjs` matches nothing.** A mid-pattern slash anchors it to the
+  `.gitignore`'s own directory, so it only ever applies to a top-level `scripts/`, never
+  `myopic-studio/scripts/` — and `.tmp-*.mjs` already covers that case. Kept as specified;
+  noted here as redundant.
+- **`myopic-studio/scripts/tmp-measure.mjs` stays visible** — no leading dot, so neither
+  pattern reaches it. Not widened to `tmp-*.mjs` unilaterally, since that would also swallow
+  legitimately-named files.
+- `myopic-studio/src/lib/lighting 5.ts` confirmed **VISIBLE** — the ` 2`/` 3` conflict-copy
+  names are deliberately left unignored, so a lost edit cannot disappear silently.
+
+### Gates, verbatim, on `4c5f37a` + the `.gitignore` change
+
+- `npx tsc --version` → `Version 4.9.5` (checked before trusting the typecheck)
+- `npx tsc --noEmit` → clean, exit 0
+- `npm run test:ci` → `Test Suites: 12 passed, 12 total` · `Tests: 209 passed, 209 total`
+- `CI=true npm run build` → `The build folder is ready to be deployed.`
+
+209/12 — not the 151/10 the brief expected. That figure predates #30; the entry above already
+records the move to 209/12.
+
+### Still to do, on the machine that has the files
+
+Steps 1–4 unchanged, plus the four branches above. Counts of duplicates deleted vs.
+quarantined to `_conflict-review/`, and any duplicate holding real divergent work, belong in
+an amendment to this entry once that sweep runs.
