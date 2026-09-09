@@ -2269,3 +2269,98 @@ and adding it means touching the pinned CRA 5 / TS 4.9.5 toolchain), and `Viewpo
 remaining extractable pure logic (`isExterior`'s `locationName` fallback, `buildObject`'s
 `mesh.kind` switch, and whether the palette is indexed by scene-array position rather than a
 filtered counter).
+
+---
+
+## Nomad Sculpt import spike (2026-08-13): a user-authored figure renders, unmodified app
+
+First end-to-end test of PRD §9's open asset-pipeline question against a real sculpt — a
+figure exported from Nomad Sculpt (`generator: "nomad 11"`), supplied by the user. The
+headline: **no app code changed.** The PRD §4 mesh abstraction and the PRD §11 v1.5
+custom-asset material exemption already carried it. What the spike added is one script and
+one asset directory.
+
+### What the asset needed
+
+`scripts/measure-glb.mjs` on the raw export:
+
+```
+y  -0.9188 →  0.8321   x  -0.3897 →  0.3897   z  -0.1571 →  0.1156   ** NOT GROUNDED **
+```
+
+- **Scale was already right** — 1.751m tall, life-sized in metres, so `scale` stays 1.
+- **Facing was already right** — +Z. Determined by bucketing the `geoadamfootr` vertices by
+  z and reading the top of each bucket: the foot's high end (the ankle) sits at −z and the
+  low thin end (the toes) at +z. Worth recording as the technique — the whole-mesh bbox is
+  near-symmetric in z and tells you nothing, and the head is a red herring (the back of a
+  skull projects about as far as a nose).
+- **Grounding was wrong** — origin at the hips, so `min.y` = −0.92. Rendered as-is the figure
+  stands buried to the waist, because the renderer lifts *primitives* by half their extent
+  and never lifts a glTF group (PRD §4). Nomad has no reason to know our convention; this is
+  the one thing essentially every hand-authored import will get wrong.
+- Modest, not heavy: 48 meshes, 34,476 triangles, 0 textures, vertex colours only. The
+  "sculpts are millions of triangles" worry did not materialise on this export, but that is a
+  property of *this* file, not of Nomad.
+
+### `scripts/normalize-glb.mjs` (new) — the fixer to measure-glb's reporter
+
+Grounds (`min.y → 0`), optionally centres x/z, optionally yaws, bakes the transform into the
+geometry, re-exports `.glb`. Deliberately does **not** decimate or rescale: a silent rescale
+would hide an export-settings mistake worth knowing about, and "too heavy" depends on how
+many figures a scene holds.
+
+- **`GLTFExporter` needs a `FileReader` shim under Node.** Its binary path assembles a Blob
+  and reads it back through `FileReader`, which Node has no global for (`Blob` itself is
+  global since Node 18). Only `readAsArrayBuffer` + `onloadend` are on that path, so the shim
+  in the script is ~8 lines. Same family of jsdom/Node gaps as `setupTests.ts`'s
+  `structuredClone`/`TextDecoder` backfills.
+- Round-trip preserved all 26 materials and their vertex colours; only `asset.generator`
+  changed (`nomad 11` → `THREE.GLTFExporter`).
+
+### Where custom assets live
+
+`public/assets/custom/` — a new directory, deliberately **not** `poses/` or `props/`:
+
+1. Registering the figure in `poses.json` would put its path in `LIBRARY_PATHS`, and
+   `buildObject()` re-materials everything in that set from the palette — the sculpt's own
+   materials would be overwritten with a warm grey. Staying out of the library is what keeps
+   PRD.md:309's exemption working.
+2. `props.test.ts` asserts *both* directions for `public/assets/props`, so an unregistered
+   `.glb` there fails the suite. `poses.test.ts` checks poses.json → file only. Neither suite
+   looks at other directories, so `custom/` is free. (Confirmed: 209/209 still pass.)
+
+### Evidence
+
+Live, in the running app, on the pre-existing "Apartment Window Talk — Dusk" scene:
+
+- `char_01`'s **glTF Path** set to `/assets/custom/nomad-figure-a.glb`. The figure renders
+  standing on the floor at correct height beside `char_02`'s untouched capsule, casts shadow,
+  and **keeps its pale Nomad material** while the library pose one step earlier rendered
+  warm-grey — the v1.5 rule visible in a single before/after.
+- The **Pose** dropdown correctly reports `(custom glTF)`, and the hierarchy label updates.
+- Camera view (50mm · 16:9) frames it in profile, consistent with its `Rotation Y = 90`.
+- All three gates green; `git status` clean for `scenes/` throughout (the swap was in-memory,
+  never saved).
+
+### The ergonomic gap this exposed, and one near-miss
+
+- **There is no way to reach a custom mesh from a primitive.** `MeshEditor` only renders the
+  **glTF Path** field when `mesh.kind === 'gltf'`, so attaching a sculpt to a capsule
+  character means picking a library pose you don't want *first*, then overwriting its path.
+  Fine for a spike, wrong for a workflow. The obvious fix is a "(custom glTF…)" entry in the
+  mesh dropdown that switches `kind` and focuses an empty path field; that plus an upload
+  route (`POST /api/assets`) and running `normalize-glb` server-side on receipt is what a real
+  Phase 2 import looks like. Not built — PRD §9 says the pipeline is not the implementing
+  model's decision.
+- **Near-miss worth recording, and it is the third instance of the same trap.** Driving the
+  panel by `label.parentElement.querySelector('input')` wrote into **Name**, not **glTF
+  Path** — `Row` in `fields.tsx` is itself a `<label>` wrapping its input, so `parentElement`
+  is the whole panel and `querySelector` returns its *first* input. Use
+  `label.querySelector(...)`. Caught only because the screenshot showed the path text sitting
+  in the Name box. Milestones 2/4 warned about index-based selection; this is that trap
+  wearing a label-based disguise.
+- Unrelated but hit every time: CRA's dev server will not start in this container without
+  `DANGEROUSLY_DISABLE_HOST_CHECK=true`. Because `package.json` sets `proxy`,
+  `webpackDevServer.config.js` needs an `allowedHost` it derives from a LAN URL that does not
+  exist here, and fails with the opaque `options.allowedHosts[0] should be a non-empty
+  string`.
