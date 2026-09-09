@@ -3070,8 +3070,8 @@ that entry prescribed — #31 `test-coverage`, #32 `nomad-sculpt`, #33 the hygie
 the arm-bleed correction apply to a garment or only to the body it was measured from — was
 resolved **in favour of applying it**, and survives only as a comment in `main()` reading
 `NOT VERIFIED against real garment geometry`. A fuller merge write-up, with the three gates
-run on merged `main`, still wants doing on a machine that can run them; this container has no
-`node_modules` and installing them was not worth it for a documentation change.
+run on merged `main`, is the entry below this one — written the same day, once the toolchain
+was installed.
 
 ### The finding
 
@@ -3155,3 +3155,117 @@ question, not a storage one.
 - **Two branches merged the same day can each be correct and jointly wrong.** Neither #34 nor
   v1.10 contained an error. The stale number appeared in the gap between them, which is
   exactly where nobody is reviewing.
+
+---
+
+## The five-PR merge, verified (2026-09-09): all three gates green on `main` at `708602a`
+
+**The 8 September entry above predicted a merge order and a design question and then stopped,
+because that session could not run the app's toolchain.** This is the follow-through: the
+merges landed, and `main` has now been put through all three gates in a container with
+`node_modules` actually installed (`npm ci`, 1387 packages, 20 s). **Every number below was
+measured in this session, not quoted from a branch's own log entry.**
+
+### The gates, verbatim, on `708602a`
+
+- `npx tsc --version` → `Version 4.9.5` — checked before trusting the typecheck, per the
+  standing habit.
+- `npx tsc --noEmit` → clean, **exit 0**.
+- `npm run test:ci` → **`Test Suites: 13 passed, 13 total` · `Tests: 239 passed, 239 total`**,
+  4.4 s. Suites: `apiClients`, `storyboardStore`, `sets`, `framing`, `lighting`, `parser`,
+  `dof`, `sceneStore`, `palette`, `props`, `myoFormat`, `poses`.
+- `CI=true npm run build` → **`The build folder is ready to be deployed.`**, exit 0, **zero
+  warnings**. 212.43 kB gzipped JS, 3.8 kB CSS.
+- `git status --porcelain` after both → empty. Neither the install nor the build left a stray
+  file in the tree.
+
+**239 / 13 is the `test-coverage-analysis` figure, unchanged by the other three merges** —
+which is the expected result, not a suspicious one. The 8 September entry already established
+why: `poses.test.ts` loops *inside* single tests rather than using `test.each`, so eleven new
+poses move no counter. The test still does its job — it now walks thirty rows instead of
+eight.
+
+### The merge order held
+
+`#31` test-coverage → `#32` nomad-sculpt → `#33` the hygiene log → `#34` manikin (poses) →
+`#35` section-11 (v1.10). That is the prescribed order with the hygiene log inserted, and the
+reason for it held: `#34` carries `load_standing_glb`, which lets the pipeline run without the
+48 MB CC0 bundle, so it had to precede the amendment that recorded that blocker against
+itself. `git ls-remote --heads origin` now returns **`main` alone** — all four branches are
+deleted remotely as well, which a web session could not have done itself.
+
+### The four conflict hunks, as actually resolved
+
+The 8 September entry predicted four collisions in `scripts/blender/build-pose-glbs.py` and
+prescribed a resolution for three of them. All four landed as prescribed:
+
+| hunk | prediction | as merged |
+| --- | --- | --- |
+| 1. `args()` | "mechanical" — source-or-directory vs. optional third `garments.blend` | **union taken**: `len(argv) not in (2, 3)`, returning `(src, out, garment_blend or None)` |
+| 2. `bake_and_export()` | "v1.10's list version is a superset; take it" | **taken**: `def bake_and_export(objs, rig, pose, path)` |
+| 3. `main()`'s loop | "needs care" — `load_figure` returns a tuple, the `from_glb` branch has no shift | **handled**: `obj, shift = ((load_standing_glb(src, suffix), Vector((0,0,0))) if from_glb else load_figure(src, body))` — the `.glb` path supplies a zero shift, correct because an exported `.glb` is already ground and plan-centred |
+| 4. `bind()` | "the one real design question: does the arm-bleed correction apply to a garment?" | **resolved yes**: `for piece in pieces: bind(piece, rig, m)`, carrying manikin's three-argument signature |
+
+**Hunk 4's reasoning survives only as a comment in `main()`, so it is recorded here.** A
+garment worn on a body occupies nearly the same space, so `resolve_arm_bleed`'s band —
+located from the *body's* measurements `m` — applies to it; and it is needed, because bone
+heat hands a coat's flank to the arm bones exactly as it did the body's, so a raised arm would
+otherwise drag the hem. The comment ends `NOT VERIFIED against real garment geometry`, and
+that is still true: `GARMENT_FIGURES` ships empty, so this path has never executed. **Check it
+against the first garment.**
+
+Ordering inside the loop is worth recording too, because it is not obvious: `build_hair` runs
+before the bind loop, hair is **excluded** from that loop and `parent_to_head`-ed afterwards,
+then appended to `pieces` so it reaches `bake_and_export`. Hair rides the skull; it does not
+skin.
+
+### The sequencing trap was avoided
+
+The 8 September entry's sharpest warning: if v1.10 landed first and `build:poses` were run,
+the export would rebuild a *four*-pose library while `poses.json` claimed thirty, failing
+`poses.test.ts` on 22 rows. Merged `main` is clear of it — the script's `POSES` table holds
+**15 rows** (`standing, sitting, crouching, lying, kneeling, sitting-ground, leaning-back,
+head-down, slumped, arms-raised, walking, pointing, looking-off, turned-to-listen,
+gesturing`) alongside `FIGURES` `['', '-female']`, `HAIR`, and an empty `GARMENT_FIGURES`. A
+rebuild now produces 30 files against 30 `poses.json` rows.
+
+### The library on disk
+
+`node scripts/measure-glb.mjs public/assets/poses` — **all 30 report `grounded`**, `min.y`
+within a rounding error of zero. Standing heights: **1.6900 m** default figure, **1.6393 m**
+`-female`, which is v1.8's legibility argument surviving contact with the exporter. `lying`
+measures 0.29 m tall and runs to −1.69 in z, grounded like the rest.
+
+**Positive evidence that the committed binaries are still bald**, rather than the PRD's word
+for it: parsing all thirty GLB JSON chunks gives **one mesh, one node and exactly 12,010
+vertices in every single file**. Hair is additional geometry however it is exported, so an
+identical vertex count across the library is proof none of it carries any. `npm run build:poses`
+on a machine with Blender remains the outstanding step, exactly as v1.10 recorded.
+
+### A strengthening of v1.11's delta claim, measured library-wide
+
+v1.11 (entry above) established that `indices` and `TEXCOORD_0` are byte-identical between
+`standing.glb` and `sitting.glb`. Extended to all thirty files: **15 of 30 match
+`standing.glb` byte-for-byte on both buffers** — precisely the default figure's fifteen poses.
+The `-female` fifteen share the same *vertex count* but not the same index and UV bytes, so
+the pack holds **two topology bases, not one**. v1.11's wording ("across all poses of the same
+figure") is correct as written; this is the whole-library confirmation of it.
+
+### One finding, small and real
+
+**`myopic-studio/scripts/blender/__pycache__/build-pose-glbs.cpython-311.pyc` is tracked** —
+59,398 bytes of compiled Python committed by `#35`. `.gitignore` has no `__pycache__/` rule,
+so `#33`'s hygiene pass could not have caught it. It is the only tracked build artifact in
+the repo (`git ls-files | grep -E '\.(pyc|log|DS_Store)$'` returns it and nothing else). Not
+removed here — noted for the owner, since a `git rm --cached` plus one `.gitignore` line is
+the whole fix.
+
+### Still not verified, and not verifiable here
+
+- **No live parse.** Still no `ANTHROPIC_API_KEY` in this container. The parser now offers the
+  model **30 rows** built from `poses.json` at require time; whether it picks 1-of-30
+  reliably is untested and remains the single largest untested behaviour in the app.
+- **Nothing seen in the viewport.** No WebGL here; the gates prove the code compiles, builds
+  and passes its unit tests, not that a scene renders.
+- **The garment bind path has never run**, per hunk 4 above.
+- **v1.10's acceptance list is still 0 of 6**, and criterion 1 was itself corrected by v1.11.
