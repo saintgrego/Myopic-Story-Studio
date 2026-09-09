@@ -342,6 +342,37 @@ const POSES = {
   // Flat on the back, face up, feet at the origin, head toward -Z: the standing
   // figure rotated at the root. The lift that rests its back on the floor is derived.
   lying: { hipY: 0.77, rootRotX: -Math.PI / 2 },
+
+  // --- second batch, 12 August 2026. Angles are shared verbatim with the Blender
+  // pipeline's POSES table in scripts/blender/build-pose-glbs.py, which is the real
+  // generator; the two tables must stay in step. hipY has no counterpart there (that
+  // pipeline measures the pelvis off the mesh) and is set here for the look of the pose.
+  // Upright on both knees: thighs vertical, shins folded back to horizontal.
+  kneeling: { hipY: 0.62, kneeBend: Math.PI / 2, armForward: -0.15 },
+  // On the floor, legs straight out in front, torso upright.
+  'sitting-ground': { hipY: 0.2, thighForward: -Math.PI / 2, kneeBend: 0, armForward: -0.2, elbowBend: -0.3 },
+  // Weight tipped back against something out of frame; the lean is all spine.
+  'leaning-back': { hipY: 0.77, torsoBend: -0.35, headTilt: -0.2, armForward: 0.15 },
+  // Head bowed, hands up to meet the eyeline — reading, a phone, a map.
+  'head-down': { hipY: 0.77, headTilt: 0.5, armForward: -0.35, elbowBend: -0.5 },
+  // Collapsed through the spine and neck with the legs nearly straight.
+  slumped: { hipY: 0.7, torsoBend: 0.7, headTilt: 0.4, thighForward: -0.2, kneeBend: 0.35, armForward: 0.1 },
+  // Both arms overhead. This mannequin has always been able to do it — its limbs are
+  // separate primitives on their own pivots, so there is no skin to tear. The authored
+  // figure could not until the Blender pipeline's arm-weight bleed was fixed (13 Aug).
+  'arms-raised': { hipY: 0.77, armForward: -2.7, elbowBend: -0.15 },
+
+  // THE TABLE STOPS BEING IN STEP HERE, deliberately. The Blender pipeline gained
+  // asymmetric and off-axis poses on 13 August (walking, pointing, looking-off,
+  // turned-to-listen, gesturing); this generator applies one angle per joint to both sides
+  // and only about x, so it cannot express any of them. Bringing it level means a second
+  // implementation of JOINT_ALIASES and BONE_ORDER against three.js groups, which is a lot
+  // of machinery for a fallback whose whole point is being crude but dependency-free.
+  //
+  // It already produces a subset — it has never built the `-female` figures either — so the
+  // shape of the compromise is not new. Run it and you get the nine symmetric postures as
+  // primitive mannequins; poses.json will still list the rest, and those paths will 404
+  // until the Blender pipeline is run. That is the documented cost of the no-Blender path.
 };
 
 mkdirSync(OUT_DIR, { recursive: true });

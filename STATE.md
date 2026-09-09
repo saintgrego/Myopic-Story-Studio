@@ -2222,6 +2222,446 @@ rather than a filtered counter — the exact regression `palette.ts`'s own comme
 
 ---
 
+## Fetch wrapper tests (2026-08-12): 30 tests, no production change
+
+The three thin clients over the backend's routes — `lib/parser.ts`, `lib/sceneApi.ts`,
+`lib/storyboardApi.ts` — were all at 0%. They are the next item on the list left at the end
+of the server-route work, and the cheapest: the `global.fetch` mock idiom already existed in
+`parser.test.ts`. `src/__tests__/apiClients.test.ts` covers all six functions. **No
+production code changed** — nothing was broken, so this is pinning, not fixing.
+
+What is now pinned, per wrapper: the request built (URL, method, `Content-Type`, and the
+body's envelope shape — `{ scene }`, `{ frames }`, `{ prompt }` — which has to match what the
+route destructures), the success unwrapping (`body.scenes`, `body.scene`, `body.frames`), and
+all three error paths.
+
+### Rules worth remembering
+
+- **`loadScene` encodes the filename into the path, and that is load-bearing.** The route
+  rejects anything outside `[A-Za-z0-9_-]+\.myo`, but an *unencoded* name changes which path
+  is requested rather than being refused — `../storyboard.json` would resolve one directory
+  up before the server's guard ever saw it. Three encoding cases are tested.
+- **There are three distinct failure shapes, not two.** A failing reply may carry
+  `{ error }`, may carry JSON without it, or may not be JSON at all (an HTML 502 from a
+  proxy, a dead backend). The third is what `sceneApi`'s `.catch(() => ({}))` inside
+  `unwrapError` exists for, and it was the case most likely to be dropped in a rewrite.
+- **The wrappers do not agree on error messages, and that is now visible.** `sceneApi` routes
+  every failure through `unwrapError` and prefers the server's `{ error }`; `storyboardApi`
+  throws a fixed string and never reads the body. Both sets of routes *do* send `{ error }`,
+  so the storyboard wrappers discard a message they were handed. Pinned as current behaviour
+  in a named describe block rather than changed — nothing in the UI surfaces the difference
+  today, so the fix belongs with whatever does.
+- **Test teeth were checked by mutation, not assumed.** With no defect to negative-control
+  against, three behaviours were broken on purpose (drop `encodeURIComponent`, return `body`
+  instead of `body.scenes`, drop the `body.error ??` preference); exactly the 6 tests that
+  claim to pin them failed, and the other 24 passed.
+
+### Evidence
+
+239 tests / 13 suites, up from 209 / 12. All three gates green: `./node_modules/.bin/tsc
+--noEmit`, `npm run test:ci`, `CI=true npm run build`.
+
+### Still uncovered
+
+Unchanged from the previous entry, minus this item: all seven components and `App.tsx` at 0%
+with no component test infrastructure in the repo (`@testing-library/react` is not a devDep,
+and adding it means touching the pinned CRA 5 / TS 4.9.5 toolchain), and `Viewport.tsx`'s
+remaining extractable pure logic (`isExterior`'s `locationName` fallback, `buildObject`'s
+`mesh.kind` switch, and whether the palette is indexed by scene-array position rather than a
+filtered counter).
+
+---
+
+## Hair, wardrobe and more poses — exploration only (2026-08-12)
+
+Owner asked to explore options for more poses, reference figures with basic hairstyles, and
+simple wardrobe. Written up in `docs/proposal-hair-wardrobe-and-more-poses.md`. **Nothing was
+built and no amendment was logged** — the document is the analysis, per the precedent of
+`docs/proposal-realistic-figure-assets.md`.
+
+The findings worth having here rather than only in the proposal:
+
+- **The premise was stale.** The request assumed T-posed manikins; the library has been
+  authored figure geometry since v1.7/v1.8 (eight `.glb`s, 4.0 MB). The live gap is not
+  anatomy, it is that the two figures are visually identical in a two-shot — which is what
+  hair and clothing fix, as silhouette.
+- **Poses split cleanly in two.** `POSES` in `build-pose-glbs.py` exposes six angles, all
+  about world X, all applied symmetrically to `.L`/`.R`. So roughly six more postures
+  (kneeling, sitting-ground, leaning-back, arms-raised, head-down, slumped) are reachable by
+  adding table rows alone. Anything asymmetric or off-axis — walking, pointing, a turned head
+  — needs `rotate_x()` generalised to take an axis and per-side bone names. Neither needs an
+  amendment; v1.7's acceptance criteria already cover adding poses.
+- **The combinatorial limit is the parser, not the disk.** Treating hair and wardrobe as
+  library axes gives 4×2×3×3 = 180 rows in `poses.json`, and `server/parser.js` asks the model
+  to pick one row by hint. 1-of-180 with near-identical hints fails as a plausible wrong pick,
+  which no `[?]` sentinel catches. That, not the ~90 MB, is what rules flat axis-expansion out
+  and forces the choice between a bounded flat casting set (no code change) and composed mesh
+  refs (a PRD §4 change).
+- **Name library rows by silhouette, not gender** (`hair-short`, not `hair-male`) — same
+  reasoning v1.8 recorded for choosing "default" over "male", and paths are permanent once a
+  `.myo` references them.
+- **Nothing in any of the three tracks is buildable from a web session.** Blender is absent
+  from the agent container and the source bundle is gitignored, so no `.glb` can be produced
+  or seen in the viewport here. Pipeline code can be written for review; it cannot be run.
+
+---
+
+## Pose library, second batch (2026-08-13): five poses added, one abandoned with cause
+
+`public/assets/poses/` now holds **18 `.glb`s — nine postures × two figures**, up from eight.
+Added: `kneeling`, `sitting-ground`, `leaning-back`, `head-down`, `slumped`, each in the
+default and `-female` builds. `src/poses.json` gains ten rows; `scripts/blender/
+build-pose-glbs.py` and the `generate-pose-glbs.mjs` fallback both gain five. **No app code,
+no schema, no parser code, no `.myo` change** — `server/parser.js` builds its pose list from
+`poses.json` at require time, so it learns them from their hints alone. PRD §11 v1.7's
+acceptance criterion ("adding a fifth pose is a documented, repeatable procedure") is what
+authorises this; no amendment was needed or logged.
+
+Evidence: `docs/poses-batch2-front.png`, `docs/poses-batch2-side.png` (the side view is the
+one that reads — these are all sagittal-plane poses). All three gates green: `npx tsc
+--noEmit`, `npm run test:ci` (209 tests / 12 suites), `CI=true npm run build`.
+
+### The pipeline can now run without the 48 MB bundle
+
+`build-pose-glbs.py`'s source argument accepts **either** the CC0 bundle `.blend` **or a
+directory of already-exported `standing<suffix>.glb`** (`load_standing_glb`). This is what
+made the batch possible at all: the bundle is gitignored and `blender.org` is blocked by the
+agent proxy, so the bundle path was unavailable. `standing.glb` *is* the unposed source
+figure — `POSES['standing']` is empty — so everything downstream re-measures and re-rigs from
+it and cannot tell the sources apart.
+
+**Verified, not assumed.** Rebuilding the four original poses from `standing.glb` reproduced
+the bundle-built files at **identical vertex counts (12,010), triangle counts (21,160) and
+file sizes (500 KB)**, with bounds matching to 0.4 mm on `standing`/`sitting` and within 6 mm
+on `crouching`/`lying`. The bundle stays the source of truth: this path derives from an
+output of it, so it cannot recover multires detail and inherits any error in a committed
+`.glb`.
+
+Blender in the agent container: `apt-get install blender` gives 4.0.2, and **it needs
+`python3-numpy` installed separately** or the glTF importer dies with `ModuleNotFoundError`
+at `import_scene.gltf`. Cycles must run with `sc.cycles.use_denoising = False` — this build
+has no OpenImageDenoiser and raises rather than degrading.
+
+### `arms-raised` was cut, and why it is not a tuning problem
+
+A sixth pose, arms overhead, was built and abandoned. **The rig's automatic (bone-heat) bind
+hands the arm bones a large band of hip, outer thigh and flank** — measured by displacement
+against the rest pose: 2,300 vertices whose rest positions run y=0.435 (mid-thigh) to y=1.060
+(waist), at x = ±0.18. The cause is the source mesh's rest pose: the hands hang against the
+thighs, so the forearm bone sits ~2 cm from the outer thigh surface while the thigh bone,
+correctly inside the leg, is ~9 cm away.
+
+Raise an arm and that band follows it, dragging a curtain of triangles. At -2.7 rad it is two
+metre-long spikes beside the head; **at -1.2 rad there is still a web from the hands to the
+knees** — see `docs/poses-arm-bleed-artifact.png`. This is why every shipped pose keeps its
+arms at or below ~0.5 rad, and why the four original poses never exposed it (`crouching`'s
+-1.0 hides in the hunch).
+
+**Four fixes were built and measured, and all four were reverted. Do not retry them blind:**
+
+1. **Smoothing the weights** (`vertex_group_smooth`, 6 passes at 0.5). Changed 10,857 of
+   12,010 vertices; artefact untouched. The bad region is large and contiguous, not a scatter
+   — averaging a wrong region with itself keeps it wrong. Turning smoothing *off* made it
+   worse (square-edged curtains), so bone heat's blend is doing real work.
+2. **Separating arm from torso with `widest_gap`**, the landmark scan's own tool. Fixed the
+   ribcage flank only (287 vertices). At hip height the hand rests against the thigh with no
+   gap to find, which is exactly where the damage is.
+3. **Reassigning by nearest bone.** Confirms the wrong answer rather than fixing it — see the
+   2 cm/9 cm measurement above. Distance is what created the problem.
+4. **Region partition by walking the mesh graph** (BFS from hand/foot/neck seeds). This is
+   the right idea and it half-worked, but it needs two things that each took a full attempt
+   to find: **coincident vertices must be welded first** (glTF splits the surface at every
+   normal/UV seam, so a naive edge walk reaches only 6,430 of 12,010 vertices and strands the
+   whole curtain region), and **the arm seed cannot be a ball at the wrist** (a radius big
+   enough to hold the hand also holds thigh skin, so the walk floods the leg as "arm" and
+   strips the real arm — figures come out with limp arms and swinging legs). Enforcing the
+   partition in both directions also **severs the figure**: stripping the arm's share of
+   `spine` leaves a hard seam and the upper arms detach and float.
+
+The version that got closest — welded graph, gap-seeded arm, one-directional strip of arm
+weight from leg/core vertices below the armpit — still left curtains, and by then it was
+clearly a skinning-solver problem rather than a pose problem. **It was all reverted so the
+pipeline stays byte-identical for the existing four poses**, which is worth more than a
+sixth pose: the correction would have changed `sitting` and `crouching` output too, since
+both move their arms.
+
+**What raised arms would actually need:** proper skinning weights — voxel/geodesic heat
+rather than bone heat, or a hand-weighted `.blend` checked in as pipeline input. That is a
+real piece of work and it should be scoped deliberately, not slipped into a pose batch.
+Recorded in `docs/proposal-hair-wardrobe-and-more-poses.md` as track 1c.
+
+### Still open
+
+- **No live parse was run** — there is no `ANTHROPIC_API_KEY` in this container. The parser
+  reads `poses.json` at require time and its `POSE_LIST` was confirmed to render all 18 rows,
+  but whether the model reliably picks 1-of-18 is unverified and is the thing to watch. The
+  `crouching` hint was tightened ("kneeling at something" removed, since `kneeling` now
+  exists) for exactly this reason.
+- **Nothing was seen in the viewport.** The evidence renders are Blender/Cycles, not the app.
+
+---
+
+## Track 1c — the skinning fix (2026-08-13): raised arms work, and the old poses were wrong too
+
+`resolve_arm_bleed` in `scripts/blender/build-pose-glbs.py` fixes the defect that cut
+`arms-raised` from the second batch. The arm-angle ceiling is gone: a sweep runs to **-3.0
+rad, arms straight overhead, clean** (`docs/poses-arm-fix-after.png`, and the shoulder
+close-up in `docs/poses-arm-fix-shoulder.png`). `arms-raised` ships in both figures, so the
+library is **ten postures × two builds, 20 `.glb`s**. All three gates green; all 20 grounded.
+
+**This was not only an enabler — it repaired the poses already shipped.** Isolating the fix on
+`sitting` (same source, same Blender, bind with and without it) moves **1,080 vertices, all
+between y=0.226 and y=1.156, with a maximum displacement of 0.247 m**. The committed `sitting`
+had a quarter-metre of hip and thigh skin being dragged sideways by its own arms at only -0.5
+rad. Every pose that moves an arm changed. `standing` is untouched, as it must be — checked
+against the committed file rather than assumed: 12,010 vertices either side, maximum
+coordinate delta **1.19e-7 m**, which is float32 rounding.
+
+### How it works, and why every simpler thing failed
+
+The fix is in two halves, split at the **armpit apex** — which is *measured, not chosen*:
+walking a cut plane down from the measured armpit, the highest cut whose surface splits into
+three large connected components is the apex. At z=1.214 the mesh separates into a
+3,869-node body and two 1,129-node arms, symmetric to the node. The same code finds 1,153+1,153
+on the female figure. A wrong cut yields one component or a hundred, so the method self-checks.
+
+- **Below the apex** an arm touches nothing — it meets the body only at the shoulder — so
+  connectivity alone identifies it. Any *non-arm* vertex there loses its arm-bone weight to
+  the nearest bone it is allowed to have.
+- **Above the apex** arm and torso are one surface and connectivity says nothing, so the rule
+  switches to nearest-bone: a vertex nearer `spine`/`neck` than `upperarm` is trapezius or
+  upper chest and must not swing with the arm. This is the half that stops the shoulder cap
+  folding *through* the torso — a large dark wedge across the trapezius, still present after
+  the below-apex half was working.
+
+**The correction is one-directional, and that is load-bearing.** Only non-arm vertices are
+touched, and only their arm weight. Arm vertices keep their share of `spine` across the
+shoulder — that blend is what holds the arm on. Enforcing the partition both ways detaches the
+upper arms and floats them away.
+
+**Five approaches that failed, with the measurements that killed them.** Do not retry these:
+
+1. **Weight smoothing** (`vertex_group_smooth`). Changed 10,857 of 12,010 vertices and left
+   the curtains untouched: a large contiguous region on the wrong bone stays wrong when
+   averaged with itself. Re-tested after the partition was correct and it earned nothing
+   there either — the shoulder crease is fixed by the above-apex rule, not by smoothing — so
+   it is **not** in the pipeline. It only blurs the elbow and knee creases.
+2. **`widest_gap` separation.** Fixed the ribcage flank only, 287 vertices.
+3. **Nearest-bone reassignment, everywhere.** Confirms the wrong answer. The figure rests in
+   an **A-pose**, so each arm's inner surface hangs beside the flank, hip and outer thigh:
+   thigh skin is genuinely nearer the arm bone (~2 cm) than its own thigh bone (~9 cm).
+4. **A ball-shaped arm seed at the wrist.** Any radius big enough to hold the hand also holds
+   thigh skin, so the walk floods the leg as "arm" and strips the real arm — figures come out
+   with limp arms and swinging legs.
+5. **Slice-based seeding by x-projection gap, at any threshold.** A horizontal band holds only
+   **11-60 vertices**, so the natural vertex spacing is ~20 mm and both the original 0.02 test
+   and a 0.015 one read that spacing as anatomy. Measured, it labelled centre torso, both
+   thighs and the flank as "arm" (4,759 vertices). A *real* arm/torso gap is 92-181 mm — an
+   order of magnitude clear of the noise, but only where the arm is already obviously clear.
+
+**The trap that wasted the most time, and the one to remember:** a mesh round-tripped through
+`.glb` is **not** one connected component. glTF cannot share a vertex between faces that
+disagree about a normal or UV, so the surface is split along every seam — a naive edge walk
+reaches 6,430 of 12,010 vertices and silently strands the entire region under investigation,
+which then reads as "no region" and gets skipped. `surface_graph()` welds by rounded position
+first: 12,010 vertices become 10,582 nodes and the walk reaches all of them. Any future
+mesh-graph work in this pipeline must weld before walking.
+
+### Still true, still open
+
+- **No live parse.** Still no `ANTHROPIC_API_KEY` here. `poses.json` is now **20 rows** and the
+  parser builds its list from it at require time; whether the model picks 1-of-20 reliably is
+  the thing to watch, and the argument in `docs/proposal-hair-wardrobe-and-more-poses.md` for
+  *not* expanding the library along hair/wardrobe axes gets stronger with every row.
+- **Nothing seen in the viewport** — evidence is Blender/Cycles renders.
+- **What remains at extreme angles** is a small crease in the armpit itself: a static bake with
+  no corrective shapes, doing the only thing it can. Invisible at blocking scale.
+- **Track 1b (asymmetric/off-axis poses) is now unblocked** and is the natural next step — it
+  was sequenced after 1c precisely because asymmetric poses are mostly arm poses.
+
+---
+
+## Track 1b — the pose machinery goes off-axis (2026-08-13): built, no new poses yet
+
+`apply_pose` can now express asymmetric and off-axis posture. **No pose in the library uses
+it yet** — this is capability, not content, and the shipped 20 `.glb`s are untouched. Probe
+evidence in `docs/poses-asymmetric-probes.png`: a T-pose, a wide stance, a one-arm point, a
+turned head with a twisted torso, and a walk with the legs in opposition. The bind holds on
+every one, including the entirely new lateral axis, with no curtains and no tearing.
+
+Three changes, all inside `build-pose-glbs.py`:
+
+1. **`rotate_x` → `rotate(rig, bone, axis, angle)`.** It was hard-coded to `'X'`, which is
+   the whole reason every pose before today is a forward/back bend.
+2. **`POSES` entries take explicit per-bone turns** beside the friendly symmetric aliases:
+   `'upperarm.R': ('Z', -1.2)`, or a list for several turns on one bone. Explicit entries
+   apply *after* any alias touching the same bone and are never mirrored — you named the
+   side. `BONE_ORDER` keeps the strict proximal→distal application the old loop had.
+3. **Plan-centring moved from the bounding box to the pelvis.** This was the prerequisite
+   nobody would have predicted: the export centred the figure on `(min(x)+max(x))/2`, which
+   coincides with the body only while a pose is bilaterally symmetric. Reach one arm out and
+   the bounding-box centre slides toward it and takes the whole body off the origin — a
+   character placed at `x=2` would stand somewhere else. Measured across all ten postures
+   before changing it, the two origins agree to four decimal places, so the switch is a
+   no-op for the library as it stands; `p-turn`'s asymmetric x bounds (-0.394..+0.449) are
+   the proof it now does something.
+
+**MIRRORED ALIASES NEGATE ON THE LEFT.** `armOut`/`thighOut` carry a sign flip so the table
+can read "arms out 0.9" rather than spelling out both sides, and the flip goes on the *left*.
+The first version put it on the right and `armOut: 0.9` folded both arms across the crotch
+instead of spreading them — caught by rendering it, not by reasoning about it. Sagittal
+aliases (everything about x) take the same signed angle on both sides and are not mirrored.
+
+**Known drift, deliberately not chased:** rebuilding the existing 20 poses through the
+refactored code reproduces them to within **5.4e-4 m** worst case (`crouching`), sagittal
+only — the x translation is preserved to 1.8e-11 m, which is the property the centring change
+had to hold. That is 0.03% of figure height and comes from float accumulation in a re-ordered
+evaluation, not from a behaviour change. The committed binaries were **not** regenerated for
+it: churning 10 MB of assets for half a millimetre is a worse trade than the diff a future
+`npm run build:poses` will show.
+
+**Still open:** the head/neck shows a small dark band under `torsoTwist`, which is the neck
+weighting meeting a twist it has not been asked for before. Worth a look before any pose
+ships a large twist.
+
+### Track 1b, second half: five asymmetric poses ship, two were abandoned
+
+`walking`, `pointing`, `looking-off`, `turned-to-listen`, `gesturing` — in both figures, so
+the library is **fifteen postures × two builds, 30 `.glb`s**. Evidence:
+`docs/poses-asymmetric-five.png`. All 30 grounded, all three gates green, `poses.json` at 30
+rows. These are the first poses that are not bilaterally symmetric and the first that leave
+the sagittal plane.
+
+**`hand-on-hip` and `arms-crossed` were requested, attempted over four tuning rounds, and
+cut.** They are not a matter of finding better angles, and the reason generalises: both are
+**self-contact** poses — the hand has to arrive at a particular place *on the body*. This rig
+has no clavicle and no wrist, so a hand's position is the product of exactly two joint
+angles, and the reachable set does not contain the places those poses need. Measured, with
+the wrist tracked in armature space each round:
+
+| attempt | wrist lands at | reads as |
+| --- | --- | --- |
+| fold the elbow (`elbowBend -1.85`) | x=0.165, z=1.015 | hands in front of the sternum |
+| swing the forearm about y (`Y 1.3`) | x=-0.114, z=1.007 | crosses the midline, but hand is behind |
+| both, tuned (`x2`, `c1`-`c3`) | x=0.056, z=0.793 | hands clasped at the waist, not crossed |
+| elbows raised first (`d1`-`d3`) | x=0.231, y=-0.733, z=1.429 | hands out in front of the face |
+| hip candidates (`k4`-`k6`) | x=0.17, z=0.63 | arm hanging slightly out, not on the hip |
+
+PRD §11's note already said contact poses need the pose to agree with another surface and are
+"genuinely hard; probably permanently out". The finding here is that **a figure's own body is
+another surface** — self-contact is the same problem as leaning on a wall, and the two were
+misfiled as ordinary asymmetric poses when the track was scoped.
+
+**Known artefact:** `looking-off` and `turned-to-listen` show a faint dark band at the neck,
+where the neck weighting meets a twist it was never asked for before. Small at blocking scale
+and left alone; it is the same class of thing as the armpit crease, and the place to look
+first if a larger `torsoTwist` is ever wanted.
+
+**The two generator tables are now deliberately out of step.** `generate-pose-glbs.mjs`
+applies one angle per joint to both sides and only about x, so it cannot express any of the
+five. Levelling it up means a second implementation of `JOINT_ALIASES`/`BONE_ORDER` against
+three.js groups — a lot of machinery for a fallback whose point is being crude and
+dependency-free. It already built a subset (it has never made the `-female` figures), so run
+it and you get the nine symmetric postures; the other paths in `poses.json` 404 until the
+Blender pipeline runs. Written up at the bottom of its `POSES` table.
+
+---
+
+## Nomad Sculpt import spike (2026-08-13): a user-authored figure renders, unmodified app
+
+First end-to-end test of PRD §9's open asset-pipeline question against a real sculpt — a
+figure exported from Nomad Sculpt (`generator: "nomad 11"`), supplied by the user. The
+headline: **no app code changed.** The PRD §4 mesh abstraction and the PRD §11 v1.5
+custom-asset material exemption already carried it. What the spike added is one script and
+one asset directory.
+
+### What the asset needed
+
+`scripts/measure-glb.mjs` on the raw export:
+
+```
+y  -0.9188 →  0.8321   x  -0.3897 →  0.3897   z  -0.1571 →  0.1156   ** NOT GROUNDED **
+```
+
+- **Scale was already right** — 1.751m tall, life-sized in metres, so `scale` stays 1.
+- **Facing was already right** — +Z. Determined by bucketing the `geoadamfootr` vertices by
+  z and reading the top of each bucket: the foot's high end (the ankle) sits at −z and the
+  low thin end (the toes) at +z. Worth recording as the technique — the whole-mesh bbox is
+  near-symmetric in z and tells you nothing, and the head is a red herring (the back of a
+  skull projects about as far as a nose).
+- **Grounding was wrong** — origin at the hips, so `min.y` = −0.92. Rendered as-is the figure
+  stands buried to the waist, because the renderer lifts *primitives* by half their extent
+  and never lifts a glTF group (PRD §4). Nomad has no reason to know our convention; this is
+  the one thing essentially every hand-authored import will get wrong.
+- Modest, not heavy: 48 meshes, 34,476 triangles, 0 textures, vertex colours only. The
+  "sculpts are millions of triangles" worry did not materialise on this export, but that is a
+  property of *this* file, not of Nomad.
+
+### `scripts/normalize-glb.mjs` (new) — the fixer to measure-glb's reporter
+
+Grounds (`min.y → 0`), optionally centres x/z, optionally yaws, bakes the transform into the
+geometry, re-exports `.glb`. Deliberately does **not** decimate or rescale: a silent rescale
+would hide an export-settings mistake worth knowing about, and "too heavy" depends on how
+many figures a scene holds.
+
+- **`GLTFExporter` needs a `FileReader` shim under Node.** Its binary path assembles a Blob
+  and reads it back through `FileReader`, which Node has no global for (`Blob` itself is
+  global since Node 18). Only `readAsArrayBuffer` + `onloadend` are on that path, so the shim
+  in the script is ~8 lines. Same family of jsdom/Node gaps as `setupTests.ts`'s
+  `structuredClone`/`TextDecoder` backfills.
+- Round-trip preserved all 26 materials and their vertex colours; only `asset.generator`
+  changed (`nomad 11` → `THREE.GLTFExporter`).
+
+### Where custom assets live
+
+`public/assets/custom/` — a new directory, deliberately **not** `poses/` or `props/`:
+
+1. Registering the figure in `poses.json` would put its path in `LIBRARY_PATHS`, and
+   `buildObject()` re-materials everything in that set from the palette — the sculpt's own
+   materials would be overwritten with a warm grey. Staying out of the library is what keeps
+   PRD.md:309's exemption working.
+2. `props.test.ts` asserts *both* directions for `public/assets/props`, so an unregistered
+   `.glb` there fails the suite. `poses.test.ts` checks poses.json → file only. Neither suite
+   looks at other directories, so `custom/` is free. (Confirmed: 209/209 still pass.)
+
+### Evidence
+
+Live, in the running app, on the pre-existing "Apartment Window Talk — Dusk" scene:
+
+- `char_01`'s **glTF Path** set to `/assets/custom/nomad-figure-a.glb`. The figure renders
+  standing on the floor at correct height beside `char_02`'s untouched capsule, casts shadow,
+  and **keeps its pale Nomad material** while the library pose one step earlier rendered
+  warm-grey — the v1.5 rule visible in a single before/after.
+- The **Pose** dropdown correctly reports `(custom glTF)`, and the hierarchy label updates.
+- Camera view (50mm · 16:9) frames it in profile, consistent with its `Rotation Y = 90`.
+- All three gates green; `git status` clean for `scenes/` throughout (the swap was in-memory,
+  never saved).
+
+### The ergonomic gap this exposed, and one near-miss
+
+- **There is no way to reach a custom mesh from a primitive.** `MeshEditor` only renders the
+  **glTF Path** field when `mesh.kind === 'gltf'`, so attaching a sculpt to a capsule
+  character means picking a library pose you don't want *first*, then overwriting its path.
+  Fine for a spike, wrong for a workflow. The obvious fix is a "(custom glTF…)" entry in the
+  mesh dropdown that switches `kind` and focuses an empty path field; that plus an upload
+  route (`POST /api/assets`) and running `normalize-glb` server-side on receipt is what a real
+  Phase 2 import looks like. Not built — PRD §9 says the pipeline is not the implementing
+  model's decision.
+- **Near-miss worth recording, and it is the third instance of the same trap.** Driving the
+  panel by `label.parentElement.querySelector('input')` wrote into **Name**, not **glTF
+  Path** — `Row` in `fields.tsx` is itself a `<label>` wrapping its input, so `parentElement`
+  is the whole panel and `querySelector` returns its *first* input. Use
+  `label.querySelector(...)`. Caught only because the screenshot showed the path text sitting
+  in the Name box. Milestones 2/4 warned about index-based selection; this is that trap
+  wearing a label-based disguise.
+- Unrelated but hit every time: CRA's dev server will not start in this container without
+  `DANGEROUSLY_DISABLE_HOST_CHECK=true`. Because `package.json` sets `proxy`,
+  `webpackDevServer.config.js` needs an `allowedHost` it derives from a LAN URL that does not
+  exist here, and fails with the opaque `options.allowedHosts[0] should be a non-empty
+  string`.
+
+---
+
 ## Wardrobe and hair amendment drafted (2026-08-13): PRD §11 v1.10, document only
 
 **Nothing was built.** This is the amendment text only, per §11's own rule that scope is
@@ -2439,3 +2879,177 @@ from this environment (blender.org is blocked by the agent proxy). **The library
 stay bald until `npm run build:poses` runs on a machine with the bundle present.** The
 stand-in bodies used for verification are already-posed library exports, so they cannot
 stand in for that run: re-posing them would double-pose every non-standing figure.
+
+---
+
+## Repo hygiene (2026-09-08): ran on a remote clone, so the sweep could not happen — but four live branches carry unmerged work
+
+**The brief assumed a working copy this session never had.** The hygiene task described
+`~/Documents/MyopicStudio`: 113 untracked cloud-sync conflict copies, four scratch scripts, a
+modified `storyboard.json`, seven untracked `.myo` scenes, and three local branches
+(`camera-aim-height`, `set-pieces`, `prd-v1.7-figure-assets`). This session ran in a Claude
+Code web container against a **fresh clone of `origin/main`**, where none of that exists:
+`git status --porcelain` returned zero lines, `--ignored=traditional` added nothing, a
+`find` for ` <n>.<ext>` names matched **0 files**, and all 8 `.myo` scenes plus
+`storyboard.json` were tracked and unmodified at `HEAD` (`4c5f37a`).
+
+The three local branches are not here and neither are their commits: `git cat-file -t` reports
+`b5c1da3`, `ac1b99f`, `1e18583`, `cf9eacd` and `b866399` as **not valid object names**, and no
+ref matches those branch names. `559b177` and `6482140` — the `main`-side commits the brief
+cited — resolve fine, confirming `main` is intact and only the branch-side history is absent.
+**Steps 1–4 of that brief are local-machine work.** A cloud session cannot see an untracked
+file or an unpushed branch; there is nothing to diff and nothing to sweep.
+
+### What *was* settled, by content
+
+**`ac1b99f` is fully on `main` — the `camera-aim-height` and `set-pieces` branches are not
+protecting it.** Evidence, independent of the commit graph:
+
+- `60ba0e8` ("Aim the shot camera by shot type… (#24)") is an **empty commit** — `git show
+  --stat` lists no files.
+- `046760a` (the same title, #27) carries the real change: `framing.ts` +69, `framing.test.ts`
+  +58, `STATE.md` +42.
+- `main`'s `src/lib/framing.ts` today contains `AIM_FRACTION`, `aimFraction()` and
+  `aimPointForCharacter()` — the shot-type aiming logic itself.
+- The 11 August entry above already recorded this: *"#27 cherry-picked `ac1b99f` onto `main`
+  without noticing PR #24 was already open for exactly that commit; both merged, and #24's
+  squash landed as an empty commit."*
+
+So the branch-deletion question turns only on whether those branches carry **anything else**,
+which has to be answered locally with `git diff main..<branch>`.
+
+### The finding that matters: four *live* remote branches, none in the brief
+
+The brief's remote branch (`origin/claude/set-pieces-schema-viewport-0zq05y`) is gone. Four
+others exist, all **ahead of `main` with zero commits behind it**, none with an open PR
+(`list_pull_requests` returned `[]`):
+
+| branch | ahead | diff vs. `main` |
+| --- | --- | --- |
+| `claude/manikin-poses-references-dogqwp` | 6 | 44 files, +1145 — 6 new pose `.glb`s (slumped, turned-to-listen, walking × both figures), both `standing` binaries rewritten, `build-pose-glbs.py` +434, `poses.json` +114 |
+| `claude/section-11-v1-10-amendment-rsx4xx` | 4 | 10 files, +1393 — a **PRD §11 v1.10 amendment**, `assets-src/README.md`, four Blender spike scripts, `build-pose-glbs.py` +302 |
+| `claude/nomad-sculpt-import-h886e5` | 1 | 3 files, +198 — `scripts/normalize-glb.mjs`, a Nomad Sculpt `.glb` under `public/assets/custom/` |
+| `claude/test-coverage-analysis-7g10p3` | 1 | 2 files, +312 — `src/__tests__/apiClients.test.ts` |
+
+This is the same shape as the 11 August failure — *"the branch list was on screen before #25
+was opened; it was read as names, not as work."* Two of these touch
+`scripts/blender/build-pose-glbs.py` and would conflict with each other; one proposes a PRD
+amendment. **None of them is safe to treat as stale on commit count alone.**
+
+### `.gitignore`, and the one pattern that does nothing
+
+Added `.tmp-*.mjs`, `scripts/.tmp-*.mjs`, `_conflict-review/`. Verified with `git check-ignore
+-v` rather than assumed:
+
+- `.tmp-*.mjs` (no slash, so it matches a basename at any depth) catches **all three** dotted
+  scratch scripts, `myopic-studio/scripts/.tmp-measure2.mjs` included.
+- **`scripts/.tmp-*.mjs` matches nothing.** A mid-pattern slash anchors it to the
+  `.gitignore`'s own directory, so it only ever applies to a top-level `scripts/`, never
+  `myopic-studio/scripts/` — and `.tmp-*.mjs` already covers that case. Kept as specified;
+  noted here as redundant.
+- **`myopic-studio/scripts/tmp-measure.mjs` stays visible** — no leading dot, so neither
+  pattern reaches it. Not widened to `tmp-*.mjs` unilaterally, since that would also swallow
+  legitimately-named files.
+- `myopic-studio/src/lib/lighting 5.ts` confirmed **VISIBLE** — the ` 2`/` 3` conflict-copy
+  names are deliberately left unignored, so a lost edit cannot disappear silently.
+
+### Gates, verbatim, on `4c5f37a` + the `.gitignore` change
+
+- `npx tsc --version` → `Version 4.9.5` (checked before trusting the typecheck)
+- `npx tsc --noEmit` → clean, exit 0
+- `npm run test:ci` → `Test Suites: 12 passed, 12 total` · `Tests: 209 passed, 209 total`
+- `CI=true npm run build` → `The build folder is ready to be deployed.`
+
+209/12 — not the 151/10 the brief expected. That figure predates #30; the entry above already
+records the move to 209/12.
+
+### The four branches, read rather than counted (2026-09-08, amending the section above)
+
+The table above listed them by size. This is what they contain. **All four were checked out
+and put through all three gates in this container**, so the results below are measured, not
+quoted from their own log entries. **None is stale, and none duplicates work already on
+`main`** — the failure mode of 11 August is not what is happening here.
+
+| branch | gates, as measured | state |
+| --- | --- | --- |
+| `test-coverage-analysis-7g10p3` | tsc clean · **239 / 13** · build ok | complete |
+| `nomad-sculpt-import-h886e5` | tsc clean · 209 / 12 · build ok | complete |
+| `manikin-poses-references-dogqwp` | tsc clean · 209 / 12 · build ok | complete |
+| `section-11-v1-10-amendment-rsx4xx` | tsc clean · 209 / 12 · build ok | **machinery only, 0 of 6 acceptance boxes ticked** |
+
+**`test-coverage-analysis-7g10p3`** — 30 tests over the three fetch wrappers, which were at
+0%. No production code changed. Its teeth were checked by mutation rather than assumed. It
+also *pins* a live inconsistency instead of fixing it: `storyboardApi` throws a fixed string
+and discards the `{ error }` the route actually sends, while `sceneApi` prefers it.
+
+**`nomad-sculpt-import-h886e5`** — a real Nomad Sculpt figure renders with **no app code
+changed**; §4's mesh abstraction and v1.5's custom-asset material exemption already carried
+it. Adds `scripts/normalize-glb.mjs` and `public/assets/custom/`. The asset arrived with its
+origin at the hips (`min.y = −0.92`), and the entry's generalisation is the part worth
+keeping: grounding is the one convention essentially every hand-authored import will get
+wrong. `custom/` is deliberately outside `poses/` — registering it would put the path in
+`LIBRARY_PATHS` and the palette would overwrite the sculpt's own materials.
+
+**`manikin-poses-references-dogqwp`** — the pose library goes **4 poses → 15**, 8 `.glb`s →
+30, both figures. Verified rather than trusted: every one of the 30 `poses.json` rows has a
+binary (`comm` against the tree listing returns empty), and all 30 clear the `min.y = 0`
+assertion. **The flat 209 test count is not evidence the new poses went unchecked** —
+`poses.test.ts` loops *inside* single tests rather than using `test.each`, so the count is
+independent of library size. It also **rewrites `standing.glb` and `standing-female.glb`**:
+the arm-weight skinning fix found the existing poses were wrong too. Paths are unchanged, so
+saved `.myo` files still load; they simply render better. Two poses were cut with stated
+cause rather than shipped soft.
+
+**`section-11-v1-10-amendment-rsx4xx`** — PRD **§11 v1.10**: wardrobe and coarse hair as part
+of the figure identity, roster capped at six. The derived-garment approach was spiked and
+**falsified** (*"a derived garment knows only distance from a vertical axis, and a standing
+figure is not radial"*), and the PRD keeps the dead reasoning marked as overturned rather
+than deleting it. Hair is built and bone-parented to the skull rather than skinned.
+`GARMENT_FIGURES` ships empty. **It touches neither `poses.json` nor a single binary** —
+`git diff --stat main..<branch> -- src/poses.json public/assets/` is empty — so the committed
+figures stay bald until `build:poses` is re-run.
+
+### The collision, and the order it forces
+
+**All four merge cleanly onto `main` individually** (`git merge-tree --write-tree`, no
+conflict on any). Only the two pose branches fight each other: **4 conflict hunks in
+`scripts/blender/build-pose-glbs.py`**, plus STATE.md prose. Measured in a throwaway worktree,
+since removed.
+
+They are **complementary, not duplicative** — manikin does skinning and off-axis posing,
+v1.10 does hair and garment geometry — but both edit the same regions and each changes a
+different function's signature:
+
+1. `args()` — manikin's source-or-directory second argument vs. v1.10's optional third
+   `garments.blend`. Mechanical.
+2. `bake_and_export()` — `(obj, …)` vs. `(objs, …)`. **v1.10's list version is a superset**;
+   take it.
+3. `main()`'s loop — v1.10 changes `load_figure` to return a **tuple** `(obj, shift)`, which
+   manikin's `from_glb` branch has no shift for. Needs care.
+4. `bind()` — manikin's `bind(obj, rig, m)` arm-weight fix vs. v1.10's `for piece in pieces:
+   bind(piece, rig)`. **The one real design question: does the arm-bleed correction apply to
+   a garment, or only to the body it was measured from?**
+
+**Merge order: `test-coverage` and `nomad-sculpt` (independent, either order), then
+`manikin`, then `section-11`.** Manikin goes first for a reason beyond size —
+`load_standing_glb` lets the pipeline run from an already-exported `standing.glb` **instead of
+the 48 MB CC0 bundle**, which is gitignored and whose source is blocked by the agent proxy.
+That is precisely the blocker v1.10 recorded against itself (*"not reachable from the machine
+this was built on"*). Manikin verified the substitution by rebuilding the four original poses
+from `standing.glb` and reproducing them.
+
+**The sequencing trap, stated plainly.** `build:poses` regenerates the library from the
+`POSES` table in the script — 4 rows on `main`, 15 on manikin. **If v1.10 lands first and
+`build:poses` is run to pick up the hair, the export rebuilds a four-pose library while
+`poses.json` still claims thirty**, and `poses.test.ts`'s path→file direction fails on 22
+rows. Manikin must precede any regeneration, not merely any merge.
+
+### Still to do, on the machine that has the files
+
+Steps 1–4 of the brief are unchanged: the conflict-copy table, the three local-branch diffs,
+and the untracked `.myo` triage all need the working copy this session never had. Counts of
+duplicates deleted vs. quarantined to `_conflict-review/`, and any duplicate holding real
+divergent work, belong in a further amendment once that sweep runs.
+
+The four remote branches above are **no longer in that category** — they are read, measured
+and ordered. What remains for them is the merge itself, and hunk 4's design question.

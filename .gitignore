@@ -3,3 +3,10 @@ node_modules/
 build/
 .DS_Store
 .claude/settings.local.json
+
+# Scratch scripts and quarantined cloud-sync conflict copies.
+# Deliberately absent: any pattern matching " 2"/" 3"-style conflict-copy names —
+# those must stay visible in `git status` so a lost edit cannot silently vanish.
+.tmp-*.mjs
+scripts/.tmp-*.mjs
+_conflict-review/
