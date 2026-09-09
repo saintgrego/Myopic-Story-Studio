@@ -557,6 +557,8 @@ Sleeves need the arm's axis and trousers need each leg's; a ring has neither. Pr
 
 **What this supersedes, recorded here rather than rewritten in place.** Earlier amendments state that rigging, IK and pose editors stay out, and that a pose is a mesh rather than a field — v1.2 (the core decision and its "still out" list), v1.7 ("nothing rigged ships in the `.glb`"), v1.8 and v1.10 (their "still out" restatements). For the mannequin, those statements are superseded by this amendment. They are left as written as the record of what was decided at the time. Morphs, facial expression and animation remain out as those amendments said.
 
+**Asset size is capped by a test, not by prose.** A drafted v1.11 (9 September 2026, never adopted) found that v1.10's six-figure cap failed to bound a library whose size is poses × figures, because the cap existed only as a sentence here. v2.0 removes that multiplication — a pose becomes a rotation table, not a file — but keeps the lesson: **the rigged figure `.glb`s get a per-file and total byte ceiling, asserted in the test suite beside the `min.y ≈ 0` check.** The ceiling values are set when the first rigged figure's real size is known, not estimated.
+
 **Implementation phases (none started):**
 
 1. Rig — the 19-joint Mixamo-named skeleton on the mannequin, with prefix stripping on import.

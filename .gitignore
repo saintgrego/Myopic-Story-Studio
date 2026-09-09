@@ -2,6 +2,11 @@ node_modules/
 .env
 build/
 .DS_Store
+
+# Python bytecode from scripts/blender/. Regenerated on import, never an input.
+# No mid-pattern slash, so it matches at any depth — the trap the block below records.
+__pycache__/
+*.pyc
 .claude/settings.local.json
 
 # Scratch scripts and quarantined cloud-sync conflict copies.
