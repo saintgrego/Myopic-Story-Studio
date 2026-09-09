@@ -2220,6 +2220,153 @@ and `Viewport.tsx`'s remaining extractable pure logic (`isExterior`'s `locationN
 `buildObject`'s `mesh.kind` switch, and whether the palette is indexed by scene-array position
 rather than a filtered counter — the exact regression `palette.ts`'s own comment warns about).
 
+---
+
+## Fetch wrapper tests (2026-08-12): 30 tests, no production change
+
+The three thin clients over the backend's routes — `lib/parser.ts`, `lib/sceneApi.ts`,
+`lib/storyboardApi.ts` — were all at 0%. They are the next item on the list left at the end
+of the server-route work, and the cheapest: the `global.fetch` mock idiom already existed in
+`parser.test.ts`. `src/__tests__/apiClients.test.ts` covers all six functions. **No
+production code changed** — nothing was broken, so this is pinning, not fixing.
+
+What is now pinned, per wrapper: the request built (URL, method, `Content-Type`, and the
+body's envelope shape — `{ scene }`, `{ frames }`, `{ prompt }` — which has to match what the
+route destructures), the success unwrapping (`body.scenes`, `body.scene`, `body.frames`), and
+all three error paths.
+
+### Rules worth remembering
+
+- **`loadScene` encodes the filename into the path, and that is load-bearing.** The route
+  rejects anything outside `[A-Za-z0-9_-]+\.myo`, but an *unencoded* name changes which path
+  is requested rather than being refused — `../storyboard.json` would resolve one directory
+  up before the server's guard ever saw it. Three encoding cases are tested.
+- **There are three distinct failure shapes, not two.** A failing reply may carry
+  `{ error }`, may carry JSON without it, or may not be JSON at all (an HTML 502 from a
+  proxy, a dead backend). The third is what `sceneApi`'s `.catch(() => ({}))` inside
+  `unwrapError` exists for, and it was the case most likely to be dropped in a rewrite.
+- **The wrappers do not agree on error messages, and that is now visible.** `sceneApi` routes
+  every failure through `unwrapError` and prefers the server's `{ error }`; `storyboardApi`
+  throws a fixed string and never reads the body. Both sets of routes *do* send `{ error }`,
+  so the storyboard wrappers discard a message they were handed. Pinned as current behaviour
+  in a named describe block rather than changed — nothing in the UI surfaces the difference
+  today, so the fix belongs with whatever does.
+- **Test teeth were checked by mutation, not assumed.** With no defect to negative-control
+  against, three behaviours were broken on purpose (drop `encodeURIComponent`, return `body`
+  instead of `body.scenes`, drop the `body.error ??` preference); exactly the 6 tests that
+  claim to pin them failed, and the other 24 passed.
+
+### Evidence
+
+239 tests / 13 suites, up from 209 / 12. All three gates green: `./node_modules/.bin/tsc
+--noEmit`, `npm run test:ci`, `CI=true npm run build`.
+
+### Still uncovered
+
+Unchanged from the previous entry, minus this item: all seven components and `App.tsx` at 0%
+with no component test infrastructure in the repo (`@testing-library/react` is not a devDep,
+and adding it means touching the pinned CRA 5 / TS 4.9.5 toolchain), and `Viewport.tsx`'s
+remaining extractable pure logic (`isExterior`'s `locationName` fallback, `buildObject`'s
+`mesh.kind` switch, and whether the palette is indexed by scene-array position rather than a
+filtered counter).
+
+---
+
+## Nomad Sculpt import spike (2026-08-13): a user-authored figure renders, unmodified app
+
+First end-to-end test of PRD §9's open asset-pipeline question against a real sculpt — a
+figure exported from Nomad Sculpt (`generator: "nomad 11"`), supplied by the user. The
+headline: **no app code changed.** The PRD §4 mesh abstraction and the PRD §11 v1.5
+custom-asset material exemption already carried it. What the spike added is one script and
+one asset directory.
+
+### What the asset needed
+
+`scripts/measure-glb.mjs` on the raw export:
+
+```
+y  -0.9188 →  0.8321   x  -0.3897 →  0.3897   z  -0.1571 →  0.1156   ** NOT GROUNDED **
+```
+
+- **Scale was already right** — 1.751m tall, life-sized in metres, so `scale` stays 1.
+- **Facing was already right** — +Z. Determined by bucketing the `geoadamfootr` vertices by
+  z and reading the top of each bucket: the foot's high end (the ankle) sits at −z and the
+  low thin end (the toes) at +z. Worth recording as the technique — the whole-mesh bbox is
+  near-symmetric in z and tells you nothing, and the head is a red herring (the back of a
+  skull projects about as far as a nose).
+- **Grounding was wrong** — origin at the hips, so `min.y` = −0.92. Rendered as-is the figure
+  stands buried to the waist, because the renderer lifts *primitives* by half their extent
+  and never lifts a glTF group (PRD §4). Nomad has no reason to know our convention; this is
+  the one thing essentially every hand-authored import will get wrong.
+- Modest, not heavy: 48 meshes, 34,476 triangles, 0 textures, vertex colours only. The
+  "sculpts are millions of triangles" worry did not materialise on this export, but that is a
+  property of *this* file, not of Nomad.
+
+### `scripts/normalize-glb.mjs` (new) — the fixer to measure-glb's reporter
+
+Grounds (`min.y → 0`), optionally centres x/z, optionally yaws, bakes the transform into the
+geometry, re-exports `.glb`. Deliberately does **not** decimate or rescale: a silent rescale
+would hide an export-settings mistake worth knowing about, and "too heavy" depends on how
+many figures a scene holds.
+
+- **`GLTFExporter` needs a `FileReader` shim under Node.** Its binary path assembles a Blob
+  and reads it back through `FileReader`, which Node has no global for (`Blob` itself is
+  global since Node 18). Only `readAsArrayBuffer` + `onloadend` are on that path, so the shim
+  in the script is ~8 lines. Same family of jsdom/Node gaps as `setupTests.ts`'s
+  `structuredClone`/`TextDecoder` backfills.
+- Round-trip preserved all 26 materials and their vertex colours; only `asset.generator`
+  changed (`nomad 11` → `THREE.GLTFExporter`).
+
+### Where custom assets live
+
+`public/assets/custom/` — a new directory, deliberately **not** `poses/` or `props/`:
+
+1. Registering the figure in `poses.json` would put its path in `LIBRARY_PATHS`, and
+   `buildObject()` re-materials everything in that set from the palette — the sculpt's own
+   materials would be overwritten with a warm grey. Staying out of the library is what keeps
+   PRD.md:309's exemption working.
+2. `props.test.ts` asserts *both* directions for `public/assets/props`, so an unregistered
+   `.glb` there fails the suite. `poses.test.ts` checks poses.json → file only. Neither suite
+   looks at other directories, so `custom/` is free. (Confirmed: 209/209 still pass.)
+
+### Evidence
+
+Live, in the running app, on the pre-existing "Apartment Window Talk — Dusk" scene:
+
+- `char_01`'s **glTF Path** set to `/assets/custom/nomad-figure-a.glb`. The figure renders
+  standing on the floor at correct height beside `char_02`'s untouched capsule, casts shadow,
+  and **keeps its pale Nomad material** while the library pose one step earlier rendered
+  warm-grey — the v1.5 rule visible in a single before/after.
+- The **Pose** dropdown correctly reports `(custom glTF)`, and the hierarchy label updates.
+- Camera view (50mm · 16:9) frames it in profile, consistent with its `Rotation Y = 90`.
+- All three gates green; `git status` clean for `scenes/` throughout (the swap was in-memory,
+  never saved).
+
+### The ergonomic gap this exposed, and one near-miss
+
+- **There is no way to reach a custom mesh from a primitive.** `MeshEditor` only renders the
+  **glTF Path** field when `mesh.kind === 'gltf'`, so attaching a sculpt to a capsule
+  character means picking a library pose you don't want *first*, then overwriting its path.
+  Fine for a spike, wrong for a workflow. The obvious fix is a "(custom glTF…)" entry in the
+  mesh dropdown that switches `kind` and focuses an empty path field; that plus an upload
+  route (`POST /api/assets`) and running `normalize-glb` server-side on receipt is what a real
+  Phase 2 import looks like. Not built — PRD §9 says the pipeline is not the implementing
+  model's decision.
+- **Near-miss worth recording, and it is the third instance of the same trap.** Driving the
+  panel by `label.parentElement.querySelector('input')` wrote into **Name**, not **glTF
+  Path** — `Row` in `fields.tsx` is itself a `<label>` wrapping its input, so `parentElement`
+  is the whole panel and `querySelector` returns its *first* input. Use
+  `label.querySelector(...)`. Caught only because the screenshot showed the path text sitting
+  in the Name box. Milestones 2/4 warned about index-based selection; this is that trap
+  wearing a label-based disguise.
+- Unrelated but hit every time: CRA's dev server will not start in this container without
+  `DANGEROUSLY_DISABLE_HOST_CHECK=true`. Because `package.json` sets `proxy`,
+  `webpackDevServer.config.js` needs an `allowedHost` it derives from a LAN URL that does not
+  exist here, and fails with the opaque `options.allowedHosts[0] should be a non-empty
+  string`.
+
+---
+
 ## Repo hygiene (2026-09-08): ran on a remote clone, so the sweep could not happen — but four live branches carry unmerged work
 
 **The brief assumed a working copy this session never had.** The hygiene task described
