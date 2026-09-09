@@ -12,12 +12,67 @@
   {
     "name": "crouching",
     "path": "/assets/poses/crouching.glb",
-    "hint": "crouched, hunched over, bent forward, kneeling at something — use this when the description does not indicate a woman"
+    "hint": "crouched, hunched over, bent forward over something, down on the balls of the feet — prefer 'kneeling' if they are upright on both knees — use this when the description does not indicate a woman"
   },
   {
     "name": "lying",
     "path": "/assets/poses/lying.glb",
     "hint": "lying down flat on their back — asleep, collapsed, on a bed or the ground — use this when the description does not indicate a woman"
+  },
+  {
+    "name": "kneeling",
+    "path": "/assets/poses/kneeling.glb",
+    "hint": "upright on both knees, torso vertical — praying, proposing, tending to someone on the floor; prefer 'crouching' if they are bent forward over something — use this when the description does not indicate a woman"
+  },
+  {
+    "name": "sitting-ground",
+    "path": "/assets/poses/sitting-ground.glb",
+    "hint": "sitting on the floor or ground with the legs straight out in front, torso upright — use this rather than 'sitting' when there is no chair, and rather than 'lying' when they are upright — use this when the description does not indicate a woman"
+  },
+  {
+    "name": "leaning-back",
+    "path": "/assets/poses/leaning-back.glb",
+    "hint": "standing with the weight tipped back and the chin up — leaning against a wall, bar or desk edge, or looking upward — use this when the description does not indicate a woman"
+  },
+  {
+    "name": "head-down",
+    "path": "/assets/poses/head-down.glb",
+    "hint": "standing with the head bowed and the hands raised to meet the eyeline — reading, checking a phone or a map, studying something held — use this when the description does not indicate a woman"
+  },
+  {
+    "name": "slumped",
+    "path": "/assets/poses/slumped.glb",
+    "hint": "standing but collapsed forward through the spine and neck, legs nearly straight — exhausted, defeated, grieving; prefer 'crouching' if they are down on bent knees — use this when the description does not indicate a woman"
+  },
+  {
+    "name": "arms-raised",
+    "path": "/assets/poses/arms-raised.glb",
+    "hint": "standing with both arms up overhead — surrender, hands up, cheering, reaching for something high, waving to someone far off — use this when the description does not indicate a woman"
+  },
+  {
+    "name": "walking",
+    "path": "/assets/poses/walking.glb",
+    "hint": "mid-stride, walking or running — legs in opposition, arms counter-swung; use when the character is moving rather than standing still — use this when the description does not indicate a woman"
+  },
+  {
+    "name": "pointing",
+    "path": "/assets/poses/pointing.glb",
+    "hint": "one arm raised out and forward to point at something, the other arm down, head following the point — indicating, directing, singling something out — use this when the description does not indicate a woman"
+  },
+  {
+    "name": "looking-off",
+    "path": "/assets/poses/looking-off.glb",
+    "hint": "standing square on but with the head turned away to look off to one side — distracted, hearing something, watching something leave frame — use this when the description does not indicate a woman"
+  },
+  {
+    "name": "turned-to-listen",
+    "path": "/assets/poses/turned-to-listen.glb",
+    "hint": "turned toward someone standing beside or behind them, torso round and head further — listening, being addressed, in conversation — use this when the description does not indicate a woman"
+  },
+  {
+    "name": "gesturing",
+    "path": "/assets/poses/gesturing.glb",
+    "hint": "mid-speech with one hand open and raised, the other arm quiet — talking, explaining, making a point — use this when the description does not indicate a woman"
   },
   {
     "name": "standing-female",
@@ -32,11 +87,66 @@
   {
     "name": "crouching-female",
     "path": "/assets/poses/crouching-female.glb",
-    "hint": "crouched, hunched over, bent forward, kneeling at something — female figure, use when the description indicates a woman"
+    "hint": "crouched, hunched over, bent forward over something, down on the balls of the feet — prefer 'kneeling-female' if they are upright on both knees — female figure, use when the description indicates a woman"
   },
   {
     "name": "lying-female",
     "path": "/assets/poses/lying-female.glb",
     "hint": "lying down flat on their back — asleep, collapsed, on a bed or the ground — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "kneeling-female",
+    "path": "/assets/poses/kneeling-female.glb",
+    "hint": "upright on both knees, torso vertical — praying, proposing, tending to someone on the floor; prefer 'crouching-female' if they are bent forward over something — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "sitting-ground-female",
+    "path": "/assets/poses/sitting-ground-female.glb",
+    "hint": "sitting on the floor or ground with the legs straight out in front, torso upright — use this rather than 'sitting-female' when there is no chair — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "leaning-back-female",
+    "path": "/assets/poses/leaning-back-female.glb",
+    "hint": "standing with the weight tipped back and the chin up — leaning against a wall, bar or desk edge, or looking upward — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "head-down-female",
+    "path": "/assets/poses/head-down-female.glb",
+    "hint": "standing with the head bowed and the hands raised to meet the eyeline — reading, checking a phone or a map, studying something held — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "slumped-female",
+    "path": "/assets/poses/slumped-female.glb",
+    "hint": "standing but collapsed forward through the spine and neck, legs nearly straight — exhausted, defeated, grieving; prefer 'crouching-female' if they are down on bent knees — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "arms-raised-female",
+    "path": "/assets/poses/arms-raised-female.glb",
+    "hint": "standing with both arms up overhead — surrender, hands up, cheering, reaching for something high, waving to someone far off — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "walking-female",
+    "path": "/assets/poses/walking-female.glb",
+    "hint": "mid-stride, walking or running — legs in opposition, arms counter-swung; use when the character is moving rather than standing still — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "pointing-female",
+    "path": "/assets/poses/pointing-female.glb",
+    "hint": "one arm raised out and forward to point at something, the other arm down, head following the point — indicating, directing, singling something out — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "looking-off-female",
+    "path": "/assets/poses/looking-off-female.glb",
+    "hint": "standing square on but with the head turned away to look off to one side — distracted, hearing something, watching something leave frame — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "turned-to-listen-female",
+    "path": "/assets/poses/turned-to-listen-female.glb",
+    "hint": "turned toward someone standing beside or behind them, torso round and head further — listening, being addressed, in conversation — female figure, use when the description indicates a woman"
+  },
+  {
+    "name": "gesturing-female",
+    "path": "/assets/poses/gesturing-female.glb",
+    "hint": "mid-speech with one hand open and raised, the other arm quiet — talking, explaining, making a point — female figure, use when the description indicates a woman"
   }
 ]
