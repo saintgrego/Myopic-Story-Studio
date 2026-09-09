@@ -3256,9 +3256,15 @@ figure") is correct as written; this is the whole-library confirmation of it.
 **`myopic-studio/scripts/blender/__pycache__/build-pose-glbs.cpython-311.pyc` is tracked** —
 59,398 bytes of compiled Python committed by `#35`. `.gitignore` has no `__pycache__/` rule,
 so `#33`'s hygiene pass could not have caught it. It is the only tracked build artifact in
-the repo (`git ls-files | grep -E '\.(pyc|log|DS_Store)$'` returns it and nothing else). Not
-removed here — noted for the owner, since a `git rm --cached` plus one `.gitignore` line is
-the whole fix.
+the repo (`git ls-files | grep -E '\.(pyc|log|DS_Store)$'` returns it and nothing else).
+**Fixed on the owner's say-so, same day:** `git rm --cached` (the file stays on disk, being
+regenerable and none of git's business), plus `__pycache__/` and `*.pyc` in `.gitignore`.
+Verified rather than assumed, per the trap `#33` recorded one block below in the same file:
+`git check-ignore -v` reports `.gitignore:8:__pycache__/` against the path, and
+`git ls-files` now matches no build artifact at all. The trailing-slash-only pattern matches
+at any depth — a mid-pattern slash would have anchored it to the repo root and silently
+missed `myopic-studio/scripts/blender/`, which is exactly how `scripts/.tmp-*.mjs` came to
+match nothing.
 
 ### Still not verified, and not verifiable here
 
