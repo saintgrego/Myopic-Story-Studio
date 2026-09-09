@@ -2222,6 +2222,56 @@ rather than a filtered counter — the exact regression `palette.ts`'s own comme
 
 ---
 
+## Fetch wrapper tests (2026-08-12): 30 tests, no production change
+
+The three thin clients over the backend's routes — `lib/parser.ts`, `lib/sceneApi.ts`,
+`lib/storyboardApi.ts` — were all at 0%. They are the next item on the list left at the end
+of the server-route work, and the cheapest: the `global.fetch` mock idiom already existed in
+`parser.test.ts`. `src/__tests__/apiClients.test.ts` covers all six functions. **No
+production code changed** — nothing was broken, so this is pinning, not fixing.
+
+What is now pinned, per wrapper: the request built (URL, method, `Content-Type`, and the
+body's envelope shape — `{ scene }`, `{ frames }`, `{ prompt }` — which has to match what the
+route destructures), the success unwrapping (`body.scenes`, `body.scene`, `body.frames`), and
+all three error paths.
+
+### Rules worth remembering
+
+- **`loadScene` encodes the filename into the path, and that is load-bearing.** The route
+  rejects anything outside `[A-Za-z0-9_-]+\.myo`, but an *unencoded* name changes which path
+  is requested rather than being refused — `../storyboard.json` would resolve one directory
+  up before the server's guard ever saw it. Three encoding cases are tested.
+- **There are three distinct failure shapes, not two.** A failing reply may carry
+  `{ error }`, may carry JSON without it, or may not be JSON at all (an HTML 502 from a
+  proxy, a dead backend). The third is what `sceneApi`'s `.catch(() => ({}))` inside
+  `unwrapError` exists for, and it was the case most likely to be dropped in a rewrite.
+- **The wrappers do not agree on error messages, and that is now visible.** `sceneApi` routes
+  every failure through `unwrapError` and prefers the server's `{ error }`; `storyboardApi`
+  throws a fixed string and never reads the body. Both sets of routes *do* send `{ error }`,
+  so the storyboard wrappers discard a message they were handed. Pinned as current behaviour
+  in a named describe block rather than changed — nothing in the UI surfaces the difference
+  today, so the fix belongs with whatever does.
+- **Test teeth were checked by mutation, not assumed.** With no defect to negative-control
+  against, three behaviours were broken on purpose (drop `encodeURIComponent`, return `body`
+  instead of `body.scenes`, drop the `body.error ??` preference); exactly the 6 tests that
+  claim to pin them failed, and the other 24 passed.
+
+### Evidence
+
+239 tests / 13 suites, up from 209 / 12. All three gates green: `./node_modules/.bin/tsc
+--noEmit`, `npm run test:ci`, `CI=true npm run build`.
+
+### Still uncovered
+
+Unchanged from the previous entry, minus this item: all seven components and `App.tsx` at 0%
+with no component test infrastructure in the repo (`@testing-library/react` is not a devDep,
+and adding it means touching the pinned CRA 5 / TS 4.9.5 toolchain), and `Viewport.tsx`'s
+remaining extractable pure logic (`isExterior`'s `locationName` fallback, `buildObject`'s
+`mesh.kind` switch, and whether the palette is indexed by scene-array position rather than a
+filtered counter).
+
+---
+
 ## Hair, wardrobe and more poses — exploration only (2026-08-12)
 
 Owner asked to explore options for more poses, reference figures with basic hairstyles, and
@@ -2514,3 +2564,272 @@ three.js groups — a lot of machinery for a fallback whose point is being crude
 dependency-free. It already built a subset (it has never made the `-female` figures), so run
 it and you get the nine symmetric postures; the other paths in `poses.json` 404 until the
 Blender pipeline runs. Written up at the bottom of its `POSES` table.
+
+---
+
+## Nomad Sculpt import spike (2026-08-13): a user-authored figure renders, unmodified app
+
+First end-to-end test of PRD §9's open asset-pipeline question against a real sculpt — a
+figure exported from Nomad Sculpt (`generator: "nomad 11"`), supplied by the user. The
+headline: **no app code changed.** The PRD §4 mesh abstraction and the PRD §11 v1.5
+custom-asset material exemption already carried it. What the spike added is one script and
+one asset directory.
+
+### What the asset needed
+
+`scripts/measure-glb.mjs` on the raw export:
+
+```
+y  -0.9188 →  0.8321   x  -0.3897 →  0.3897   z  -0.1571 →  0.1156   ** NOT GROUNDED **
+```
+
+- **Scale was already right** — 1.751m tall, life-sized in metres, so `scale` stays 1.
+- **Facing was already right** — +Z. Determined by bucketing the `geoadamfootr` vertices by
+  z and reading the top of each bucket: the foot's high end (the ankle) sits at −z and the
+  low thin end (the toes) at +z. Worth recording as the technique — the whole-mesh bbox is
+  near-symmetric in z and tells you nothing, and the head is a red herring (the back of a
+  skull projects about as far as a nose).
+- **Grounding was wrong** — origin at the hips, so `min.y` = −0.92. Rendered as-is the figure
+  stands buried to the waist, because the renderer lifts *primitives* by half their extent
+  and never lifts a glTF group (PRD §4). Nomad has no reason to know our convention; this is
+  the one thing essentially every hand-authored import will get wrong.
+- Modest, not heavy: 48 meshes, 34,476 triangles, 0 textures, vertex colours only. The
+  "sculpts are millions of triangles" worry did not materialise on this export, but that is a
+  property of *this* file, not of Nomad.
+
+### `scripts/normalize-glb.mjs` (new) — the fixer to measure-glb's reporter
+
+Grounds (`min.y → 0`), optionally centres x/z, optionally yaws, bakes the transform into the
+geometry, re-exports `.glb`. Deliberately does **not** decimate or rescale: a silent rescale
+would hide an export-settings mistake worth knowing about, and "too heavy" depends on how
+many figures a scene holds.
+
+- **`GLTFExporter` needs a `FileReader` shim under Node.** Its binary path assembles a Blob
+  and reads it back through `FileReader`, which Node has no global for (`Blob` itself is
+  global since Node 18). Only `readAsArrayBuffer` + `onloadend` are on that path, so the shim
+  in the script is ~8 lines. Same family of jsdom/Node gaps as `setupTests.ts`'s
+  `structuredClone`/`TextDecoder` backfills.
+- Round-trip preserved all 26 materials and their vertex colours; only `asset.generator`
+  changed (`nomad 11` → `THREE.GLTFExporter`).
+
+### Where custom assets live
+
+`public/assets/custom/` — a new directory, deliberately **not** `poses/` or `props/`:
+
+1. Registering the figure in `poses.json` would put its path in `LIBRARY_PATHS`, and
+   `buildObject()` re-materials everything in that set from the palette — the sculpt's own
+   materials would be overwritten with a warm grey. Staying out of the library is what keeps
+   PRD.md:309's exemption working.
+2. `props.test.ts` asserts *both* directions for `public/assets/props`, so an unregistered
+   `.glb` there fails the suite. `poses.test.ts` checks poses.json → file only. Neither suite
+   looks at other directories, so `custom/` is free. (Confirmed: 209/209 still pass.)
+
+### Evidence
+
+Live, in the running app, on the pre-existing "Apartment Window Talk — Dusk" scene:
+
+- `char_01`'s **glTF Path** set to `/assets/custom/nomad-figure-a.glb`. The figure renders
+  standing on the floor at correct height beside `char_02`'s untouched capsule, casts shadow,
+  and **keeps its pale Nomad material** while the library pose one step earlier rendered
+  warm-grey — the v1.5 rule visible in a single before/after.
+- The **Pose** dropdown correctly reports `(custom glTF)`, and the hierarchy label updates.
+- Camera view (50mm · 16:9) frames it in profile, consistent with its `Rotation Y = 90`.
+- All three gates green; `git status` clean for `scenes/` throughout (the swap was in-memory,
+  never saved).
+
+### The ergonomic gap this exposed, and one near-miss
+
+- **There is no way to reach a custom mesh from a primitive.** `MeshEditor` only renders the
+  **glTF Path** field when `mesh.kind === 'gltf'`, so attaching a sculpt to a capsule
+  character means picking a library pose you don't want *first*, then overwriting its path.
+  Fine for a spike, wrong for a workflow. The obvious fix is a "(custom glTF…)" entry in the
+  mesh dropdown that switches `kind` and focuses an empty path field; that plus an upload
+  route (`POST /api/assets`) and running `normalize-glb` server-side on receipt is what a real
+  Phase 2 import looks like. Not built — PRD §9 says the pipeline is not the implementing
+  model's decision.
+- **Near-miss worth recording, and it is the third instance of the same trap.** Driving the
+  panel by `label.parentElement.querySelector('input')` wrote into **Name**, not **glTF
+  Path** — `Row` in `fields.tsx` is itself a `<label>` wrapping its input, so `parentElement`
+  is the whole panel and `querySelector` returns its *first* input. Use
+  `label.querySelector(...)`. Caught only because the screenshot showed the path text sitting
+  in the Name box. Milestones 2/4 warned about index-based selection; this is that trap
+  wearing a label-based disguise.
+- Unrelated but hit every time: CRA's dev server will not start in this container without
+  `DANGEROUSLY_DISABLE_HOST_CHECK=true`. Because `package.json` sets `proxy`,
+  `webpackDevServer.config.js` needs an `allowedHost` it derives from a LAN URL that does not
+  exist here, and fails with the opaque `options.allowedHosts[0] should be a non-empty
+  string`.
+
+---
+
+## Repo hygiene (2026-09-08): ran on a remote clone, so the sweep could not happen — but four live branches carry unmerged work
+
+**The brief assumed a working copy this session never had.** The hygiene task described
+`~/Documents/MyopicStudio`: 113 untracked cloud-sync conflict copies, four scratch scripts, a
+modified `storyboard.json`, seven untracked `.myo` scenes, and three local branches
+(`camera-aim-height`, `set-pieces`, `prd-v1.7-figure-assets`). This session ran in a Claude
+Code web container against a **fresh clone of `origin/main`**, where none of that exists:
+`git status --porcelain` returned zero lines, `--ignored=traditional` added nothing, a
+`find` for ` <n>.<ext>` names matched **0 files**, and all 8 `.myo` scenes plus
+`storyboard.json` were tracked and unmodified at `HEAD` (`4c5f37a`).
+
+The three local branches are not here and neither are their commits: `git cat-file -t` reports
+`b5c1da3`, `ac1b99f`, `1e18583`, `cf9eacd` and `b866399` as **not valid object names**, and no
+ref matches those branch names. `559b177` and `6482140` — the `main`-side commits the brief
+cited — resolve fine, confirming `main` is intact and only the branch-side history is absent.
+**Steps 1–4 of that brief are local-machine work.** A cloud session cannot see an untracked
+file or an unpushed branch; there is nothing to diff and nothing to sweep.
+
+### What *was* settled, by content
+
+**`ac1b99f` is fully on `main` — the `camera-aim-height` and `set-pieces` branches are not
+protecting it.** Evidence, independent of the commit graph:
+
+- `60ba0e8` ("Aim the shot camera by shot type… (#24)") is an **empty commit** — `git show
+  --stat` lists no files.
+- `046760a` (the same title, #27) carries the real change: `framing.ts` +69, `framing.test.ts`
+  +58, `STATE.md` +42.
+- `main`'s `src/lib/framing.ts` today contains `AIM_FRACTION`, `aimFraction()` and
+  `aimPointForCharacter()` — the shot-type aiming logic itself.
+- The 11 August entry above already recorded this: *"#27 cherry-picked `ac1b99f` onto `main`
+  without noticing PR #24 was already open for exactly that commit; both merged, and #24's
+  squash landed as an empty commit."*
+
+So the branch-deletion question turns only on whether those branches carry **anything else**,
+which has to be answered locally with `git diff main..<branch>`.
+
+### The finding that matters: four *live* remote branches, none in the brief
+
+The brief's remote branch (`origin/claude/set-pieces-schema-viewport-0zq05y`) is gone. Four
+others exist, all **ahead of `main` with zero commits behind it**, none with an open PR
+(`list_pull_requests` returned `[]`):
+
+| branch | ahead | diff vs. `main` |
+| --- | --- | --- |
+| `claude/manikin-poses-references-dogqwp` | 6 | 44 files, +1145 — 6 new pose `.glb`s (slumped, turned-to-listen, walking × both figures), both `standing` binaries rewritten, `build-pose-glbs.py` +434, `poses.json` +114 |
+| `claude/section-11-v1-10-amendment-rsx4xx` | 4 | 10 files, +1393 — a **PRD §11 v1.10 amendment**, `assets-src/README.md`, four Blender spike scripts, `build-pose-glbs.py` +302 |
+| `claude/nomad-sculpt-import-h886e5` | 1 | 3 files, +198 — `scripts/normalize-glb.mjs`, a Nomad Sculpt `.glb` under `public/assets/custom/` |
+| `claude/test-coverage-analysis-7g10p3` | 1 | 2 files, +312 — `src/__tests__/apiClients.test.ts` |
+
+This is the same shape as the 11 August failure — *"the branch list was on screen before #25
+was opened; it was read as names, not as work."* Two of these touch
+`scripts/blender/build-pose-glbs.py` and would conflict with each other; one proposes a PRD
+amendment. **None of them is safe to treat as stale on commit count alone.**
+
+### `.gitignore`, and the one pattern that does nothing
+
+Added `.tmp-*.mjs`, `scripts/.tmp-*.mjs`, `_conflict-review/`. Verified with `git check-ignore
+-v` rather than assumed:
+
+- `.tmp-*.mjs` (no slash, so it matches a basename at any depth) catches **all three** dotted
+  scratch scripts, `myopic-studio/scripts/.tmp-measure2.mjs` included.
+- **`scripts/.tmp-*.mjs` matches nothing.** A mid-pattern slash anchors it to the
+  `.gitignore`'s own directory, so it only ever applies to a top-level `scripts/`, never
+  `myopic-studio/scripts/` — and `.tmp-*.mjs` already covers that case. Kept as specified;
+  noted here as redundant.
+- **`myopic-studio/scripts/tmp-measure.mjs` stays visible** — no leading dot, so neither
+  pattern reaches it. Not widened to `tmp-*.mjs` unilaterally, since that would also swallow
+  legitimately-named files.
+- `myopic-studio/src/lib/lighting 5.ts` confirmed **VISIBLE** — the ` 2`/` 3` conflict-copy
+  names are deliberately left unignored, so a lost edit cannot disappear silently.
+
+### Gates, verbatim, on `4c5f37a` + the `.gitignore` change
+
+- `npx tsc --version` → `Version 4.9.5` (checked before trusting the typecheck)
+- `npx tsc --noEmit` → clean, exit 0
+- `npm run test:ci` → `Test Suites: 12 passed, 12 total` · `Tests: 209 passed, 209 total`
+- `CI=true npm run build` → `The build folder is ready to be deployed.`
+
+209/12 — not the 151/10 the brief expected. That figure predates #30; the entry above already
+records the move to 209/12.
+
+### The four branches, read rather than counted (2026-09-08, amending the section above)
+
+The table above listed them by size. This is what they contain. **All four were checked out
+and put through all three gates in this container**, so the results below are measured, not
+quoted from their own log entries. **None is stale, and none duplicates work already on
+`main`** — the failure mode of 11 August is not what is happening here.
+
+| branch | gates, as measured | state |
+| --- | --- | --- |
+| `test-coverage-analysis-7g10p3` | tsc clean · **239 / 13** · build ok | complete |
+| `nomad-sculpt-import-h886e5` | tsc clean · 209 / 12 · build ok | complete |
+| `manikin-poses-references-dogqwp` | tsc clean · 209 / 12 · build ok | complete |
+| `section-11-v1-10-amendment-rsx4xx` | tsc clean · 209 / 12 · build ok | **machinery only, 0 of 6 acceptance boxes ticked** |
+
+**`test-coverage-analysis-7g10p3`** — 30 tests over the three fetch wrappers, which were at
+0%. No production code changed. Its teeth were checked by mutation rather than assumed. It
+also *pins* a live inconsistency instead of fixing it: `storyboardApi` throws a fixed string
+and discards the `{ error }` the route actually sends, while `sceneApi` prefers it.
+
+**`nomad-sculpt-import-h886e5`** — a real Nomad Sculpt figure renders with **no app code
+changed**; §4's mesh abstraction and v1.5's custom-asset material exemption already carried
+it. Adds `scripts/normalize-glb.mjs` and `public/assets/custom/`. The asset arrived with its
+origin at the hips (`min.y = −0.92`), and the entry's generalisation is the part worth
+keeping: grounding is the one convention essentially every hand-authored import will get
+wrong. `custom/` is deliberately outside `poses/` — registering it would put the path in
+`LIBRARY_PATHS` and the palette would overwrite the sculpt's own materials.
+
+**`manikin-poses-references-dogqwp`** — the pose library goes **4 poses → 15**, 8 `.glb`s →
+30, both figures. Verified rather than trusted: every one of the 30 `poses.json` rows has a
+binary (`comm` against the tree listing returns empty), and all 30 clear the `min.y = 0`
+assertion. **The flat 209 test count is not evidence the new poses went unchecked** —
+`poses.test.ts` loops *inside* single tests rather than using `test.each`, so the count is
+independent of library size. It also **rewrites `standing.glb` and `standing-female.glb`**:
+the arm-weight skinning fix found the existing poses were wrong too. Paths are unchanged, so
+saved `.myo` files still load; they simply render better. Two poses were cut with stated
+cause rather than shipped soft.
+
+**`section-11-v1-10-amendment-rsx4xx`** — PRD **§11 v1.10**: wardrobe and coarse hair as part
+of the figure identity, roster capped at six. The derived-garment approach was spiked and
+**falsified** (*"a derived garment knows only distance from a vertical axis, and a standing
+figure is not radial"*), and the PRD keeps the dead reasoning marked as overturned rather
+than deleting it. Hair is built and bone-parented to the skull rather than skinned.
+`GARMENT_FIGURES` ships empty. **It touches neither `poses.json` nor a single binary** —
+`git diff --stat main..<branch> -- src/poses.json public/assets/` is empty — so the committed
+figures stay bald until `build:poses` is re-run.
+
+### The collision, and the order it forces
+
+**All four merge cleanly onto `main` individually** (`git merge-tree --write-tree`, no
+conflict on any). Only the two pose branches fight each other: **4 conflict hunks in
+`scripts/blender/build-pose-glbs.py`**, plus STATE.md prose. Measured in a throwaway worktree,
+since removed.
+
+They are **complementary, not duplicative** — manikin does skinning and off-axis posing,
+v1.10 does hair and garment geometry — but both edit the same regions and each changes a
+different function's signature:
+
+1. `args()` — manikin's source-or-directory second argument vs. v1.10's optional third
+   `garments.blend`. Mechanical.
+2. `bake_and_export()` — `(obj, …)` vs. `(objs, …)`. **v1.10's list version is a superset**;
+   take it.
+3. `main()`'s loop — v1.10 changes `load_figure` to return a **tuple** `(obj, shift)`, which
+   manikin's `from_glb` branch has no shift for. Needs care.
+4. `bind()` — manikin's `bind(obj, rig, m)` arm-weight fix vs. v1.10's `for piece in pieces:
+   bind(piece, rig)`. **The one real design question: does the arm-bleed correction apply to
+   a garment, or only to the body it was measured from?**
+
+**Merge order: `test-coverage` and `nomad-sculpt` (independent, either order), then
+`manikin`, then `section-11`.** Manikin goes first for a reason beyond size —
+`load_standing_glb` lets the pipeline run from an already-exported `standing.glb` **instead of
+the 48 MB CC0 bundle**, which is gitignored and whose source is blocked by the agent proxy.
+That is precisely the blocker v1.10 recorded against itself (*"not reachable from the machine
+this was built on"*). Manikin verified the substitution by rebuilding the four original poses
+from `standing.glb` and reproducing them.
+
+**The sequencing trap, stated plainly.** `build:poses` regenerates the library from the
+`POSES` table in the script — 4 rows on `main`, 15 on manikin. **If v1.10 lands first and
+`build:poses` is run to pick up the hair, the export rebuilds a four-pose library while
+`poses.json` still claims thirty**, and `poses.test.ts`'s path→file direction fails on 22
+rows. Manikin must precede any regeneration, not merely any merge.
+
+### Still to do, on the machine that has the files
+
+Steps 1–4 of the brief are unchanged: the conflict-copy table, the three local-branch diffs,
+and the untracked `.myo` triage all need the working copy this session never had. Counts of
+duplicates deleted vs. quarantined to `_conflict-review/`, and any duplicate holding real
+divergent work, belong in a further amendment once that sweep runs.
+
+The four remote branches above are **no longer in that category** — they are read, measured
+and ordered. What remains for them is the merge itself, and hunk 4's design question.
