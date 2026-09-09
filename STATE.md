@@ -2219,3 +2219,53 @@ Also still untested: the three fetch wrappers (`lib/parser.ts`, `sceneApi.ts`,
 and `Viewport.tsx`'s remaining extractable pure logic (`isExterior`'s `locationName` fallback,
 `buildObject`'s `mesh.kind` switch, and whether the palette is indexed by scene-array position
 rather than a filtered counter — the exact regression `palette.ts`'s own comment warns about).
+
+---
+
+## Fetch wrapper tests (2026-08-12): 30 tests, no production change
+
+The three thin clients over the backend's routes — `lib/parser.ts`, `lib/sceneApi.ts`,
+`lib/storyboardApi.ts` — were all at 0%. They are the next item on the list left at the end
+of the server-route work, and the cheapest: the `global.fetch` mock idiom already existed in
+`parser.test.ts`. `src/__tests__/apiClients.test.ts` covers all six functions. **No
+production code changed** — nothing was broken, so this is pinning, not fixing.
+
+What is now pinned, per wrapper: the request built (URL, method, `Content-Type`, and the
+body's envelope shape — `{ scene }`, `{ frames }`, `{ prompt }` — which has to match what the
+route destructures), the success unwrapping (`body.scenes`, `body.scene`, `body.frames`), and
+all three error paths.
+
+### Rules worth remembering
+
+- **`loadScene` encodes the filename into the path, and that is load-bearing.** The route
+  rejects anything outside `[A-Za-z0-9_-]+\.myo`, but an *unencoded* name changes which path
+  is requested rather than being refused — `../storyboard.json` would resolve one directory
+  up before the server's guard ever saw it. Three encoding cases are tested.
+- **There are three distinct failure shapes, not two.** A failing reply may carry
+  `{ error }`, may carry JSON without it, or may not be JSON at all (an HTML 502 from a
+  proxy, a dead backend). The third is what `sceneApi`'s `.catch(() => ({}))` inside
+  `unwrapError` exists for, and it was the case most likely to be dropped in a rewrite.
+- **The wrappers do not agree on error messages, and that is now visible.** `sceneApi` routes
+  every failure through `unwrapError` and prefers the server's `{ error }`; `storyboardApi`
+  throws a fixed string and never reads the body. Both sets of routes *do* send `{ error }`,
+  so the storyboard wrappers discard a message they were handed. Pinned as current behaviour
+  in a named describe block rather than changed — nothing in the UI surfaces the difference
+  today, so the fix belongs with whatever does.
+- **Test teeth were checked by mutation, not assumed.** With no defect to negative-control
+  against, three behaviours were broken on purpose (drop `encodeURIComponent`, return `body`
+  instead of `body.scenes`, drop the `body.error ??` preference); exactly the 6 tests that
+  claim to pin them failed, and the other 24 passed.
+
+### Evidence
+
+239 tests / 13 suites, up from 209 / 12. All three gates green: `./node_modules/.bin/tsc
+--noEmit`, `npm run test:ci`, `CI=true npm run build`.
+
+### Still uncovered
+
+Unchanged from the previous entry, minus this item: all seven components and `App.tsx` at 0%
+with no component test infrastructure in the repo (`@testing-library/react` is not a devDep,
+and adding it means touching the pinned CRA 5 / TS 4.9.5 toolchain), and `Viewport.tsx`'s
+remaining extractable pure logic (`isExterior`'s `locationName` fallback, `buildObject`'s
+`mesh.kind` switch, and whether the palette is indexed by scene-array position rather than a
+filtered counter).
