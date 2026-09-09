@@ -348,7 +348,7 @@ This replaces the removed non-goal. It is the whole of the standing policy on ho
 1. A reproducible asset pipeline in `scripts/blender/`, driving the Blender binary headlessly (**not** `pip install bpy`): import the Blender Studio base mesh, apply each pose in the library, export `.glb` into `public/assets/poses/`.
 2. **Rigging the base mesh inside the pipeline.** The Blender Studio meshes ship **unrigged**, so posing them needs a rig — Rigify, which is bundled with Blender and already present. This is a pipeline step, not a product feature: the rig exists in the `.blend`/pipeline only, and non-goal #7 stands unchanged because nothing rigged reaches a `.glb`, the app, or the user. If rigging proves to be the expensive part, MakeHuman/MPFB2 (also CC0, ships rigged) is the fallback, and swapping to it is a change to this pipeline alone.
 3. Replacement of all **four** existing pose meshes — `standing`, `sitting`, `crouching`, `lying` — with figure-based ones. `poses.json` unchanged in shape and in its four paths.
-4. A recorded decision on asset storage (in-repo, Git LFS, or fetched into a gitignored `assets-src/`), made after real file sizes are known rather than estimated. CC0 removes the *licence* constraint on committing the source mesh; the size constraint is unmeasured and still decides this.
+4. A recorded decision on asset storage (in-repo, Git LFS, or fetched into a gitignored `assets-src/`), made after real file sizes are known rather than estimated. CC0 removes the *licence* constraint on committing the source mesh; the size constraint is unmeasured and still decides this. **Closed in v1.11: in-repo, no Git LFS, bounded by a per-file and a total byte ceiling.**
 5. Retention of `scripts/generate-pose-glbs.mjs` as a fallback placeholder generator, or its removal — a call to make when the assets land.
 
 **Conventions the pipeline output must meet.** These are not new rules; they are the existing ones, written down because an authored asset is the first thing that can violate them silently:
@@ -450,9 +450,9 @@ A rename to a symmetric `-male`/`-female` pair would read better and is delibera
 - **A `wardrobe` field on `Character`**, resolved to geometry by the renderer. Rejected for the reason section 4 and v1.2 both give: it creates a second source of truth for what a character looks like, and the renderer would have to ask something other than the mesh reference.
 - **A second mesh reference — figure plus garment as separate glTFs, parented at load.** This is the tempting one, because it keeps the library additive instead of multiplicative: three garments would be three files rather than three files per pose per body. It is rejected because it puts a second thing in `buildObject()`, which section 4 exists to forbid, and because a garment that is not exported with the pose does not fit the pose — a coat authored on a standing body intersects a seated one at the hip and knee. The saving is real and the cost is a schema change plus geometry that is wrong in half the library.
 
-**The cost this decision accepts, stated plainly.** The library is poses × figures, so every figure added is four more `.glb` files at roughly 500 KB each — about 2 MB per figure, against 4 MB for the eight files that exist today. That is the whole reason for the cap below. v1.7 deferred the asset-storage decision until real file sizes were known; they are now known for the *output* library (500 KB/pose, committed to `public/assets/`, no LFS needed at this scale), and the cap is what keeps that answer true.
+**The cost this decision accepts, stated plainly — THE FIGURES IN THIS PARAGRAPH ARE SUPERSEDED BY v1.11; the reasoning stands, the arithmetic does not.** The library is poses × figures, so every figure added is four more `.glb` files at roughly 500 KB each — about 2 MB per figure, against 4 MB for the eight files that exist today. **(Measured on 9 September 2026, after #34 took the library to fifteen poses: a figure is fifteen files and ~7.3 MiB, and the thirty files on disk are 14.66 MiB. See v1.11.)** That is the whole reason for the cap below. v1.7 deferred the asset-storage decision until real file sizes were known; they are now known for the *output* library (500 KB/pose, committed to `public/assets/`, no LFS needed at this scale), and the cap is what keeps that answer true.
 
-**The roster is capped at six figures.** Twenty-four files, roughly 12 MB, and a pose dropdown that still fits on screen. A seventh needs another amendment. This is not a systematic wardrobe feature and must not grow into one by increments — the cap is the mechanism that makes each addition a decision rather than a habit.
+**The roster is capped at six figures — narrowed in v1.11, which keeps the six but makes a byte ceiling the governing limit, this cap having failed to bound a library whose size is poses × figures.** Twenty-four files, roughly 12 MB, and a pose dropdown that still fits on screen. **(Ninety files and ~44 MiB at fifteen poses; see v1.11.)** A seventh needs another amendment. This is not a systematic wardrobe feature and must not grow into one by increments — the cap is the mechanism that makes each addition a decision rather than a habit.
 
 **Naming extends v1.8's rule unchanged.** The path is `<pose><figure-suffix>.glb`; the bare suffix is the default figure and keeps working, because saved `.myo` files reference those four paths and they are the user's data. A suffix names a whole figure identity — body, wardrobe, and hair together — not a garment slot, so `-coat` is a figure, not an attachment, and there is no `-coat-longhair` combinatorial tail.
 
@@ -496,7 +496,7 @@ Sleeves need the arm's axis and trousers need each leg's; a ring has neither. Pr
 
 **Acceptance (owner-verifiable, per section 8's convention):**
 
-- [ ] Six figures across four poses render as twenty-four meshes, with no code change outside the pipeline script and `poses.json`.
+- [ ] Six figures across **fifteen** poses render as **ninety** meshes, with no code change outside the pipeline script and `poses.json`. *(Corrected in v1.11: written as "four poses… twenty-four meshes" when the library held four.)*
 - [ ] Two characters in one shot, in different wardrobe, are distinguishable at 35mm in camera view — the v1.8 test, one level harder.
 - [ ] Every `.glb` in the library measures `min.y = 0` and faces +Z, verified with `scripts/measure-glb.mjs`.
 - [ ] Every saved `.myo` referencing the original four paths still loads and renders, now clothed, with no file rewritten on disk.
@@ -504,3 +504,79 @@ Sleeves need the arm's axis and trousers need each leg's; a ring has neither. Pr
 - [ ] `npx tsc --noEmit`, `npm run test:ci` and `CI=true npm run build` stay green.
 
 **Deliberately not decided here:** whether *props* ever gain authored geometry (still open, as v1.7 left it), and whether the derived-garment approach or a second CC0 source is the long-term pipeline — that is settled by looking at the first export, not by argument.
+
+### v1.11 — 9 September 2026: the library budget is bytes, not figures
+
+**Prompted by a finding, not by a request.** Reviewing what was left outstanding after #31–#35 merged, v1.10's own storage arithmetic was checked against the tree and found stale. Nothing has been built on the wrong number yet, so this is a correction made before it costs anything — which is the only cheap moment to make it.
+
+**What v1.10 said, and it was true when written.** *"every figure added is four more `.glb` files at roughly 500 KB each — about 2 MB per figure, against 4 MB for the eight files that exist today"*, and *"The roster is capped at six figures. Twenty-four files, roughly 12 MB."* Both sentences were correct on 13 August, when the library held **four** poses.
+
+**Why it stopped being true, and the lesson is about caps, not about megabytes.** `claude/manikin-poses-references-dogqwp` (merged as #34) took the library from four poses to **fifteen**. That branch and v1.10 were written in parallel and merged the same day; neither is wrong and neither knew about the other. **v1.10 capped one factor of a product and the other factor moved underneath it.** A cap on figures cannot bound a library whose size is poses × figures — and no test, no gate, and no reviewer noticed, because the cap existed only as a sentence in this document.
+
+**The measured numbers**, taken on `main` at `708602a`:
+
+| | v1.10 assumed | measured today | full six-figure roster |
+| --- | --- | --- | --- |
+| poses × figures | 4 × 6 | 15 × 2 | 15 × 6 |
+| files | 24 | 30 | **90** |
+| `public/assets/poses/` | ~12 MB | **14.66 MiB** | **~44 MiB** |
+
+That is **3.75× the file count** and roughly **3.7× the bytes** the cap was set to protect. Per file, 512,379 bytes mean, near-identical across all thirty. `standing.glb` at 512,356 bytes holds one mesh of 12,010 vertices and 21,160 triangles, and divides cleanly:
+
+| buffer | bytes | share |
+| --- | --- | --- |
+| `POSITION` (VEC3 f32) | 144,120 | 28.1% |
+| `NORMAL` (VEC3 f32) | 144,120 | 28.1% |
+| indices (u16) | 126,960 | 24.8% |
+| `TEXCOORD_0` (VEC2 f32) | 96,080 | **18.8%** |
+
+**The free saving, and it is an embarrassing one: `TEXCOORD_0` is 18.8% of every file in a library this document forbids from ever carrying a texture.** Library glTFs are re-materialled flat from `src/palette.ts` at load (v1.5), and v1.7 and v1.10 both close on "no texture maps". The UVs are provably unreferenced by anything the app does — they are an exporter default nobody turned off. Removing them is not a compression scheme or a quality trade; it is deleting bytes that were never read.
+
+**Three dimensions, and one of them does not matter.** They are listed in order of how much they should govern the decision, because counting all three equally is how a storage argument becomes theatre.
+
+1. **Working tree — the one that binds.** Every clone pays for it in full, forever, and it is what the table above measures. 14.66 MiB today, ~44 MiB at the authorized roster.
+2. **History — real, and smaller than feared.** 55 distinct pose blobs across all history occupy **8.06 MiB** of a **15.68 MiB** pack, so **just over half of this repository is pose binaries**. But that is ~150 KiB per blob, not 500 KiB, and the reason is measured rather than guessed: **43.5% of every pose file is byte-identical across all poses of the same figure** — `indices` (126,960 B) and `TEXCOORD_0` (96,080 B) compare equal between `standing.glb` and `sitting.glb`, while `POSITION` and `NORMAL` differ. Git deltas that away. Plain compression does not: gzip alone gets only 16% off a `.glb`.
+3. **Bytes served to the browser — irrelevant, and named here so it is not counted twice.** The app is localhost-only (non-goal #4), so the library is read off the user's own disk. A future hosted mode would change this, and would need its own amendment anyway.
+
+**The decision: the governing cap is a byte ceiling. The roster cap survives underneath it.** Six figures stays, because it was never purely a storage argument — a pose dropdown still has to fit on a screen, and v1.10 is right that a cap is what makes each addition a decision rather than a habit. But six figures is no longer the thing that *bounds the library*, because it demonstrably failed to bound it. Two ceilings replace it, chosen so that both can be asserted by a test rather than believed:
+
+- **Per file: 640 KiB.** *(PROPOSED — owner to confirm the number.)* Today's files are 500.4 KiB and the v1.10 hair rebuild will add to that, so this is not a diet; it is a tripwire. It fails loudly on the two things that would silently double the library — a denser mesh, or an export that picked up material and texture data it should not have.
+- **`public/assets/` in total: 44 MiB.** *(PROPOSED — owner to confirm the number.)* The whole asset directory, not just poses, so props and any future authored geometry are counted in the same budget.
+
+**The arithmetic behind those two numbers, shown so they can be moved knowingly.** Dropping `TEXCOORD_0` takes a pose file to ~406 KiB; allow ~440 KiB with hair. Ninety files at 440 KiB is **38.7 MiB**, plus 0.16 MiB of props and 0.7 MiB under `custom/` — about **39.6 MiB**, leaving roughly 10% headroom under the ceiling. Without the UV drop the same roster lands at ~47 MiB and **breaches it**. That is deliberate: the ceiling is set where it makes the free saving mandatory instead of optional, and it is the tightest of the three plausible numbers rather than the most comfortable. Raise it and the UV work becomes discretionary again.
+
+**A cap that is not asserted is precisely the cap that just failed.** v1.10's cap was prose, and prose does not fail a build. Both ceilings above are to be checked by a test alongside the existing `min.y ≈ 0` assertion in `poses.test.ts`, which is the only reason to trust them the seventh time someone regenerates the library.
+
+**Rebuilds are a deliberate act, not a habit.** `build:poses` rewrites every binary in the library, so each full run adds a fresh generation to the pack — measured at ~150 KiB per file, roughly 13 MiB for a ninety-file roster. Run it when the pipeline changes what the output *is*, not to pick up an unrelated edit.
+
+**What changed in this document**
+
+- **§9 item 1 and item 2 are untouched.** This decides storage, not the asset pipeline, and not Daz.
+- **v1.7's "authorized to build" item 4 — the deferred asset-storage decision — closes here**, as it asked to be closed: after real sizes were known rather than estimated. The answer is **in-repo, no Git LFS, bounded by the two ceilings above**. Marked in place.
+- **v1.10's cost paragraph is corrected in place.** Its per-figure and total figures were computed against a four-pose library and are superseded by the table above; the reasoning around them stands.
+- **v1.10's roster cap is narrowed in place** — six figures still holds, but it is no longer the governing limit on library size.
+- **v1.10's acceptance criterion 1 is corrected in place**: "six figures across four poses… twenty-four meshes" is now fifteen poses and ninety meshes.
+- **No schema change, no parser change, no `.myo` change, and no change to any committed binary by this amendment itself.**
+
+**Authorized to build under this amendment**
+
+1. **Drop `TEXCOORD_0` from pipeline output** — `scripts/blender/build-pose-glbs.py` and `scripts/generate-prop-glbs.mjs`. Pipeline output only. **`public/assets/custom/` is explicitly excluded**: user-supplied assets keep their own attributes and materials, which is the v1.5 exemption and the hook for Phase 2 imports.
+2. **A byte-budget assertion** over `public/assets/`, per-file and total, failing the suite when either ceiling is exceeded.
+3. Nothing else. In particular, no change to vertex count, to the poses, or to what any figure looks like.
+
+**Still out, and not to be built without a further amendment**
+
+- **Draco and `EXT_meshopt_compression`.** Both would cut the library by roughly an order of magnitude and both are refused here, for the same reason: each needs a decoder inside the app (a `DRACOLoader` plus a WASM asset), which turns an asset question into an app-code question and adds a runtime dependency to a viewport that currently has none. Named explicitly so it cannot arrive later as an optimisation.
+- **Decimation.** Halving the triangle count would halve three of the four buffers, and 21,160 triangles is generous for a figure read at blocking scale. It is still out here because it changes *how the figures look*, which is a §11 rendering question needing rendered evidence at 35 mm — not a storage decision to be smuggled through a budget amendment.
+- **Git LFS**, unless a future ceiling passes ~100 MiB. It adds a clone-time dependency to a repo that is otherwise a plain checkout, to solve a problem two assertions solve without it.
+- Everything already out under v1.10 and under §11's rendering out-list.
+
+**Acceptance (owner-verifiable, per section 8's convention):**
+
+- [ ] `public/assets/` and its largest single `.glb` both sit under the ceilings, asserted by a test that fails when they do not — verified by deliberately breaching it once.
+- [ ] A rebuilt figure carries no `TEXCOORD_0`, is measurably smaller, and renders identically in the viewport — the palette re-material never read the UVs.
+- [ ] `public/assets/custom/` assets still load with their own materials intact.
+- [ ] Every saved `.myo` still loads: paths are unchanged and no scene file is rewritten.
+- [ ] `npx tsc --noEmit`, `npm run test:ci` and `CI=true npm run build` stay green.
+
+**Deliberately not decided here:** the two ceiling values themselves, which are proposed above with their arithmetic and want the owner's signature; and whether *props* ever gain authored geometry, still open exactly as v1.7 and v1.10 left it.

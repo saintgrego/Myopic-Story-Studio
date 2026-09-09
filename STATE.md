@@ -3053,3 +3053,105 @@ divergent work, belong in a further amendment once that sweep runs.
 
 The four remote branches above are **no longer in that category** — they are read, measured
 and ordered. What remains for them is the merge itself, and hunk 4's design question.
+
+---
+
+## PRD §11 v1.11 drafted (2026-09-09): the library budget is bytes, not figures — document only
+
+**Nothing was built.** This is the amendment text plus four in-place corrections to earlier
+sections, per §11's own rule that scope is amended before it is built — the same treatment
+v1.10 got on 13 August. No script, `poses.json` row, `.glb` or source file was touched, so
+all three gates are untouched by construction.
+
+**The context the previous entry lacks: all four branches merged this morning**, in the order
+that entry prescribed — #31 `test-coverage`, #32 `nomad-sculpt`, #33 the hygiene log, #34
+`manikin` (poses), #35 `section-11` (v1.10). `git ls-remote --heads origin` now returns
+`main` alone, so the four remote branches are gone as well. Hunk 4's design question — does
+the arm-bleed correction apply to a garment or only to the body it was measured from — was
+resolved **in favour of applying it**, and survives only as a comment in `main()` reading
+`NOT VERIFIED against real garment geometry`. A fuller merge write-up, with the three gates
+run on merged `main`, still wants doing on a machine that can run them; this container has no
+`node_modules` and installing them was not worth it for a documentation change.
+
+### The finding
+
+v1.10 justified its six-figure roster cap with *"about 2 MB per figure, against 4 MB for the
+eight files that exist today"* and *"Twenty-four files, roughly 12 MB"*. Both were true on 13
+August, when the library held **four** poses. #34 took it to **fifteen** — and #34 and v1.10
+were written in parallel on separate branches and merged the same day, so neither noticed the
+other.
+
+**The cap named one factor of a product and the other factor moved.** That is the transferable
+part; the megabytes are just the symptom. It also went unnoticed because the cap existed only
+as a sentence in the PRD, and prose does not fail a build.
+
+### Measured, on `main` at `708602a`
+
+| | v1.10 assumed | measured | six-figure roster |
+| --- | --- | --- | --- |
+| files | 24 | 30 | 90 |
+| `public/assets/poses/` | ~12 MB | **14.66 MiB** | **~44 MiB** |
+
+- `ls -l public/assets/poses/*.glb` → 15,371,380 bytes over 30 files, mean 512,379 — the
+  files are near-identical in size because every one is the same base mesh posed.
+- `standing.glb`, GLB JSON chunk parsed directly: **one** mesh, one node, 12,010 vertices,
+  21,160 triangles, attributes `POSITION`, `NORMAL`, `TEXCOORD_0`, `extensionsUsed: []`.
+  Buffers: `POSITION` 144,120 B · `NORMAL` 144,120 B · indices 126,960 B · **`TEXCOORD_0`
+  96,080 B**. They sum to 511,280 — the bufferView total — of a 512,356-byte file, so the
+  JSON chunk is ~1 KB and the geometry is all of it.
+
+**`TEXCOORD_0` is 18.8% of every file in a library the PRD forbids from carrying a texture.**
+v1.5's palette re-material discards materials at load, so nothing reads the UVs. An exporter
+default nobody turned off; deleting it is not a compression trade.
+
+### The history dimension, and why it is smaller than it looks
+
+`git count-objects -vH` → pack **15.68 MiB**. Walking `git rev-list --objects --all` through
+`cat-file --batch-check` for blobs under `assets/poses`: **55 distinct blobs, 8.06 MiB on
+disk** — **just over half the repository is pose binaries**, but at ~150 KiB per blob, not
+500 KiB.
+
+The reason was checked rather than assumed, by comparing bufferViews between two files:
+
+| buffer | `standing.glb` vs `sitting.glb` |
+| --- | --- |
+| indices (126,960 B) | **IDENTICAL** |
+| `TEXCOORD_0` (96,080 B) | **IDENTICAL** |
+| `POSITION` (144,120 B) | differs |
+| `NORMAL` (144,120 B) | differs |
+
+**43.5% of every pose file is byte-identical across all poses of the same figure**, which is
+what git deltas away. Compression alone does not do this: `gzip -c standing.glb` gets
+512,356 → 431,533, only 16% off. So a full `build:poses` run costs ~150 KiB per file in the
+pack, roughly 13 MiB for a ninety-file roster — real, but not the 45 MiB the raw sizes imply.
+**Do not repeat the raw number as the history cost.**
+
+### What the amendment decides
+
+In-repo, no Git LFS (closing v1.7's deferred item 4), governed by two ceilings — **640 KiB
+per file** and **44 MiB across `public/assets/`** — both PROPOSED, with the arithmetic shown
+so the owner can move them knowingly. The 44 MiB figure is set deliberately tight: the roster
+fits under it only if the UV drop happens (~39.6 MiB with, ~47 MiB without), so the free
+saving is mandatory rather than optional.
+
+The six-figure roster cap **survives** — it was never purely a storage argument — but it is no
+longer what bounds the library. Authorized to build: dropping `TEXCOORD_0` from pipeline
+output (**`public/assets/custom/` explicitly excluded**, per v1.5's exemption for
+user-supplied assets), and a byte-budget assertion beside `poses.test.ts`'s existing
+`min.y ≈ 0` check. Draco, meshopt, decimation and LFS are all named on the out-list so none
+can arrive later as an unremarkable optimisation — the first two because they put a decoder
+inside the app, decimation because it changes how figures look and that is a §11 rendering
+question, not a storage one.
+
+### Rules worth remembering
+
+- **Cap the product, not a factor.** A limit on figures cannot bound poses × figures. If a
+  budget matters, express it in the unit that is actually scarce.
+- **An unasserted cap is not a cap.** v1.10's failed because nothing could fail on it. The
+  ceilings here are written to be a test, not a paragraph.
+- **Measure the pack, not the working tree, before claiming a history cost.** Same-topology
+  `.glb`s delta to about 30% of their raw size; `.glb` gzips by only 16%, so it is the
+  delta doing the work, not the compression.
+- **Two branches merged the same day can each be correct and jointly wrong.** Neither #34 nor
+  v1.10 contained an error. The stale number appeared in the gap between them, which is
+  exactly where nobody is reviewing.
