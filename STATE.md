@@ -2662,6 +2662,226 @@ Live, in the running app, on the pre-existing "Apartment Window Talk — Dusk" s
 
 ---
 
+## Wardrobe and hair amendment drafted (2026-08-13): PRD §11 v1.10, document only
+
+**Nothing was built.** This is the amendment text only, per §11's own rule that scope is
+amended before it is built. No script, `poses.json` row, or `.glb` was touched, and all
+three gates are untouched because no code changed.
+
+**The scope call, which is the part worth remembering.** Wardrobe passes §11's blocking
+test on v1.8's argument — silhouette is what lets a director tell two figures apart at
+35mm. **Hair mostly fails it** and is admitted only as coarse head silhouette (bare /
+cropped / gathered), because that is what gives a symmetric skull a front and a back for
+eyeline. Strands, cards, transparency, physics and hair colour are named on the out-list
+so this amendment cannot be cited for them later.
+
+**The design decision, and the two rejections.** A dressed figure is a *figure* in v1.8's
+sense — another suffix in the roster, exported once per pose, carried by the `mesh`
+reference that already exists. Rejected: a `wardrobe` field on `Character` (two sources of
+truth, exactly what §4 forbids), and figure-plus-garment as separate glTFs parented at
+load (additive rather than multiplicative, genuinely tempting, but it puts a second thing
+in `buildObject()` and a garment authored on a standing body intersects a seated one at
+the hip and knee).
+
+**The cost that decision accepts, and the cap that bounds it.** The library is poses ×
+figures, so each figure is 4 files at ~500 KB — ~2 MB, against the 4 MB the current eight
+occupy. The roster is therefore **capped at six figures** (24 files, ~12 MB); a seventh
+needs another amendment. This also finally answers v1.7's deferred asset-storage question
+for the *output* library: in-repo under `public/assets/`, no LFS at this scale.
+
+**Where garment geometry comes from, decided in the text.** The CC0 bundle in
+`assets-src/` is bodies only, so rather than take on a second upstream asset,
+`build-pose-glbs.py` derives garments from the body it already has — select a vertex band
+by measured height, duplicate, solidify outward, extend the hem — before the armature is
+applied and the rig deleted, so the garment poses with the body. Same doctrine as the
+skeleton in that file: where a value is computable from what was built, compute it. A
+second CC0 garment source stays the fallback if derived geometry doesn't read at 35mm.
+
+**Marked in place in PRD.md**, per the v1.7 convention: §5 Characters' "Drop expression and
+costume — nothing to attach them to" (there is something to attach it to now; costume as a
+*field* stays dropped, expression stays dropped entirely), and v1.8's "any third figure
+without a further amendment" clause, which is the clause v1.10 exists to satisfy.
+Non-goal #7 is untouched — a garment is static geometry in a static pose.
+
+**Not yet done, in order:** the derived-garment spike in Blender (one export, checked for
+`min.y = 0`, +Z facing, and readability at 35mm) before any roster rows are written. v1.2
+and v1.7 both proved the mechanism before the library grew; this should too.
+
+---
+
+## Derived-garment spike (2026-08-13): FAILED, and the failure is structural
+
+**The question**, set by PRD §11 v1.10's "prove before scoping" step: can wardrobe and hair
+be **derived** from the body mesh the pose pipeline already has, instead of taken from a
+second upstream asset? **Answer: hair yes, wardrobe no.** Four iterations, four distinct
+failures, one root cause. `scripts/blender/spike-garment.py` and `spike-render.py` are the
+reproduction; both are committed, neither is pipeline code.
+
+**The root cause, which is worth more than the four symptoms.** A derived garment knows
+only **distance from a vertical axis**, and a standing figure is not radial. Sleeves need
+the arm's own axis and trousers need each leg's. Building those means a limb-aware garment
+builder driven by the rig — writing a garment modeller, not extending a pipeline.
+
+| iteration | method | what rendered |
+| --- | --- | --- |
+| 1 | band-duplicate + solidify (the method the amendment specified) | pectorals, abs and a navel **through** the coat — the shell is a parallel copy of the body; plus a horizontal barrel at the hips and a spiked crown |
+| 2 | silhouette loft, per-sector max radius | the barrel again, traced to the **hands**: at hip height the widest thing in the slice is the knuckles, ~2× the torso radius |
+| 3 | median clamp + angular/vertical smoothing | clean, legible — and a **sack that swallows the arms**, losing the body language v1.7 bought the figures for |
+| 4 | skirt only, waist down (the narrow claim: the body IS radial there) | a stiff bell that **buries the hands inside it**, because the hands hang at exactly that height |
+
+**Two failed facing tests, both plausible, both wrong.** Front/back matters because the hair
+cap is cut back from the face. (a) "Which extreme overhangs the head's bbox midline further"
+is a **tautology** — mid is (min+max)/2, so the distances are equal by construction and the
+comparison always takes its else branch. (b) "The centroid sits behind the bbox centre,
+because a skull is a volume and a nose is a spike" is a real argument and still wrong here:
+the face carries eyes, nose and lips, so its **vertices** outnumber the cranium's and drag
+the centroid forward. What works is that density used directly — sliced front-to-back,
+~1,000 verts per 2 cm slice at the face against ~60 at the back. Both wrong versions
+produced exactly one symptom: **a hair bun on the figure's face**, invisible in any number
+that was being checked. Grounding and bbox both looked fine throughout.
+
+**The app's convention re-confirmed by independent measurement**, since the spike depended
+on it: `standing.glb` faces **+Z** — dense facial geometry at +Z (1,016 verts in the 0.08–0.10
+slice vs 56 at −0.08), toes at +Z, heel at −0.14. In Blender after glTF import that is −Y,
+matching what `build-pose-glbs.py` documents.
+
+**Hair did land, and is the one part of v1.10 that can proceed.** A fitted ellipsoid scaled
+to the head's own half-extents, cut back from the face **high** (near the jaw it leaves a
+ring framing the face and renders as a bonnet), plus a gathered mass at the back. Deriving
+the cap by duplicating scalp faces and pushing them along their normals produced a **crown
+of spikes** — the head is the densest part of the mesh, so a per-vertex offset amplifies
+every bump and the cut edge shows as a ragged fringe. A fitted primitive is both more robust
+and the right level of description for a silhouette.
+
+**Costs measured, against the amendment's estimates.** Derived output ran 635 KB–1.14 MB per
+figure against `standing.glb`'s 512 KB — so v1.10's "~2 MB per figure, ~12 MB at the cap of
+six" would have been **2–4× light**. Whatever garment source is chosen, re-measure before
+trusting the cap.
+
+**Environment notes for anyone re-running this** (nothing here is in the repo's toolchain):
+Blender came from `apt` (4.0.2) and needs `python3-numpy` installed separately or the glTF
+importer dies at `import numpy`. **EEVEE cannot render headless** — it wants a GL context and
+fails on `libEGL.so.1`; Cycles on CPU works. The Ubuntu build ships **without**
+OpenImageDenoise, so `use_denoising` must be off. Blender 4.x renamed the Principled BSDF's
+`Specular` socket to `Specular IOR Level`. The real pipeline input — the CC0 bundle — was
+**not reachable** (blender.org is blocked by the agent proxy), so the spike derived against
+the committed pose library, which is that bundle's own output. The one thing that cannot
+test: whether a garment built **before** posing deforms correctly **with** the body.
+
+**Consequence for PRD §11 v1.10**, recorded there: the "derived from the base mesh" decision
+is marked superseded by measurement, garment derivation is struck from the authorized list,
+and the wardrobe half is **blocked on an asset-source decision** — v1.7's MakeHuman-style
+fallback, now the live path, and section 9's asset question reopening for wardrobe (v1.7
+closed it for bodies only). The roster cap, the naming rule, and the mesh-is-the-figure
+decision are untouched by any of this.
+
+---
+
+## Garment deform spike + pipeline garment support (2026-08-13): BUILT, verified end to end
+
+**Follow-on from the derived-garment failure above.** Owner chose option 2: hand-author
+garments on the existing CC0 bodies rather than adopt MakeHuman/MPFB2. The rejection was on
+**fit, not licence** — MPFB2 clothing is authored against its own base mesh and fitted
+through its proxy system, so it would need refitting onto Blender Studio bodies (a gentler
+version of the problem that just failed), or a whole-pipeline switch that re-exports all
+eight figures. With the roster capped at six, that is a system's worth of machinery for
+about four coats.
+
+**The question that had to be answered first**, since it decides whether hand-authoring is
+worth anything: does a separate garment mesh bound to the same rig deform **with** the body?
+If not, each garment needs re-modelling per pose — four per figure. `spike-garment-deform.py`
+answered it: **yes.** A placeholder tube spanning the hip and both thighs (the hardest case —
+seated, the thighs swing 90° and pull one tube two ways) followed the pose correctly.
+
+- **The spike execs the real pipeline's source with its trailing `main()` stripped**, rather
+  than copying `measure`/`build_armature`/`apply_pose` into itself. Copies would prove the
+  copies work and leave the pipeline untested.
+- **Verify a seated pose in PROFILE.** The first deform render was head-on and read as a
+  standing figure: thighs swinging toward the lens foreshorten to nothing. `spike-render.py`
+  gained `--side` for this. The bbox agreed with the profile view — seated output matched
+  the committed `sitting.glb` height exactly (1.4054) and extended 0.20 further forward,
+  which is the garment on the thighs.
+
+**Pipeline changes, all in `build-pose-glbs.py`:**
+
+- `bake_and_export()` takes a **list** of meshes and grounds/centres them **as one group**.
+  Grounding each separately would drop a hem to the floor independently of the feet and
+  shear the figure apart. X-centring measures the **body** (first entry), not the group — a
+  garment need not be symmetric, and a scene's `position.x` refers to the figure.
+- The pieces are **joined before export**: two objects would take two palette colours and
+  read as a collage rather than a person (§11 v1.5 assigns per object).
+- `load_figure()` now returns its plan-centring **shift**, and `load_garments()` applies the
+  same shift. Garments are authored where the body sits in the bundle (x ≈ −2.26), so
+  without this a coat lands 2.26 m to the side of its figure.
+- `GARMENT_FIGURES` (suffix → body + garment objects) ships **empty**; `build:poses` passes
+  `${GARMENTS:-assets-src/garments.blend}`, unread until the table has rows.
+
+**End-to-end verification, because an unrun code path is not done.** `spike-pipeline-smoke.py`
+builds a stand-in bundle from the committed pose library (renamed to the bundle's object
+names and **parked at x ≈ −2.26 like the real one**, which is what makes the shift testable)
+plus a placeholder garment blend, then runs the real `main()` with the roster injected.
+Twelve `.glb`s: eight bare, four clothed, all grounded.
+
+- **Regression on bare figures: bit-identical bounds to the committed library** for both
+  `standing` and `standing-female`, so the list refactor changed nothing for existing output.
+- Clothed variants differ from bare only in depth extent — `sitting-coat` z-max 0.727 vs
+  `sitting` 0.481 — which is the garment lying on the thighs, as it should.
+
+**Authoring constraints found by running it**, now written into `assets-src/README.md`:
+hems must stop at the ankle (group grounding lifts the whole figure to satisfy `min.z = 0`,
+leaving the feet hovering); leave clearance at the hands, which hang at hip height and clip
+through anything there; and **a static garment does not drape** — it deforms with its bones
+and nothing else, so a coat stays tubular in `lying`. Check all four poses, not just
+`standing`.
+
+**Still not done:** the garments. `GARMENT_FIGURES` stays empty and the library keeps its
+eight rows until they are modelled. The hair half of v1.10 is unblocked.
+
+---
+
+## Coarse hair in the pipeline (2026-08-13): PRD §11 v1.10 hair half, BUILT
+
+**The half of v1.10 that needed no asset**, so it shipped while wardrobe waits on garments.
+`build-pose-glbs.py` gains a `HAIR` table — suffix → `bare` | `cropped` | `gathered`, with
+`cropped` the default so a new roster row never silently ships bald — and `build_hair()`
+derives the geometry.
+
+**A fitted ellipsoid, not an offset copy of the scalp.** Duplicating skull faces and pushing
+them along their normals produces a **crown of spikes**: the head is the densest part of the
+mesh, so a per-vertex offset amplifies every bump and the band's cut edge shows as a ragged
+fringe. A primitive scaled to the head's own measured half-extents has neither problem, and
+a silhouette is the right level of description for what §11 admits anyway.
+
+**Cut the face out HIGH.** The cut is the entire point of the feature — it is what gives a
+symmetric skull a front and a back, and eyeline is a blocking question. Cutting near the jaw
+leaves a ring framing the face that renders as a **bonnet**; cutting at 0.62 of the head's
+depth below the crown reads as a hairline.
+
+**Bone-parented to the head, not skinned.** Hair rides the skull; it does not deform.
+Automatic weighting on a detached shell sitting near the head, neck and spine bones can
+smear it across all three. `bake_and_export()` freezes either route the same way — it clears
+the parent and keeps the evaluated world matrix — so this needed no export change.
+
+**`facing()` is now in the pipeline**, with both failed versions written into its docstring:
+the bbox-midline test is a tautology, and the centroid test loses to the face's own vertex
+density. The pipeline previously took −Y on faith from the 10 Aug spike's measurement of one
+bundle; it now measures per figure, which is what a third figure would need anyway.
+
+**Verified** through `spike-pipeline-smoke.py`: twelve outputs, all grounded, hair present
+and attached in all four poses including `lying`, where it rotates with the head to sit
+behind it on the floor. Deltas are what they should be — standing height 1.6900 → 1.7120
+(the cap), and the gathered figure's depth extends 21 mm rearward (the bun) and 9 mm forward
+(the cap on the forehead) — measured against the committed library rather than eyeballed.
+
+**The committed `.glb`s are NOT regenerated**, and this is the one thing to know before
+believing the app shows any of it. Regenerating needs the CC0 bundle, which is unreachable
+from this environment (blender.org is blocked by the agent proxy). **The library's figures
+stay bald until `npm run build:poses` runs on a machine with the bundle present.** The
+stand-in bodies used for verification are already-posed library exports, so they cannot
+stand in for that run: re-posing them would double-pose every non-standing figure.
+
+---
+
 ## Repo hygiene (2026-09-08): ran on a remote clone, so the sweep could not happen — but four live branches carry unmerged work
 
 **The brief assumed a working copy this session never had.** The hygiene task described

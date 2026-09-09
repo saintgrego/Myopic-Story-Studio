@@ -35,6 +35,7 @@ import sys
 from collections import deque
 from math import pi
 
+import bmesh
 import bpy
 from mathutils import Matrix, Vector
 
@@ -49,6 +50,44 @@ FIGURES = {
     '': 'GEO-body_male_realistic',
     '-female': 'GEO-body_female_realistic',
 }
+
+# Clothed figures (PRD §11 v1.10): suffix → (body object, garment objects to bind).
+#
+# EMPTY UNTIL THE GARMENTS ARE MODELLED, and that is the whole state of v1.10's wardrobe
+# half — the mechanism below is built and proven, the assets do not exist yet. A garment is
+# hand-authored in Blender ON one of the bodies above, in that body's own coordinates, and
+# saved into a garment .blend passed as the third argument. Adding a clothed figure is then
+# a row here plus a row in src/poses.json, exactly like adding a pose.
+#
+# WHY HAND-AUTHORED AND NOT DERIVED: deriving garments from the body was tried, rendered,
+# and failed — see STATE.md, "Derived-garment spike". A ring knows only distance from a
+# vertical axis, and a standing figure is not radial.
+#
+# THE ROSTER IS CAPPED AT SIX FIGURES TOTAL, including the two above (PRD §11 v1.10). The
+# library is poses × figures, so each row here costs four .glb files.
+GARMENT_FIGURES = {
+    # '-coat': ('GEO-body_male_realistic', ('GARMENT-coat_long',)),
+}
+
+# Coarse hair silhouette per figure (PRD §11 v1.10): suffix → 'bare' | 'cropped' | 'gathered'.
+#
+# THIS IS THE WHOLE OF WHAT v1.10 ADMITS ABOUT HAIR, and the amendment concedes most of the
+# argument to get it: hair is where "does this look real" lives, and strands, cards,
+# transparency, physics and colour are all named on the out-list. What survives §11's
+# blocking test is head SHAPE — a bare skull is symmetric front-to-back, so at 35 m it gives
+# a director no cue which way a figure is looking, and eyeline is a blocking question.
+#
+# The two styles differ in silhouette, not in detail, and they also separate the two figures
+# a little further, which is the v1.8 argument one level down.
+# A figure with no row here gets 'cropped' rather than 'bare': v1.10 gives coarse hair to
+# every figure in the roster, so a new row in GARMENT_FIGURES should not silently ship bald.
+HAIR = {
+    '': 'cropped',
+    '-female': 'gathered',
+}
+
+HAIR_OFFSET = 0.011   # how far the cap stands off the skull, metres
+BUN_RADIUS = 0.062
 
 # Reused verbatim from the placeholder generator's POSES table, whose angles were
 # validated in the viewport over several milestones. The joint set below is the same one
@@ -149,12 +188,14 @@ POSES = {
 
 def args():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
-    if len(argv) != 2:
+    if len(argv) not in (2, 3):
         raise SystemExit(
-            'usage: ... --python build-pose-glbs.py -- <source> <out-dir>\n'
+            'usage: ... --python build-pose-glbs.py -- <source> <out-dir> [garments.blend]\n'
             '  <source> is either the CC0 bundle .blend, or a directory holding an\n'
-            '  already-exported standing<suffix>.glb per figure. See load_standing_glb().')
-    return argv[0], argv[1].rstrip('/')
+            '  already-exported standing<suffix>.glb per figure. See load_standing_glb().\n'
+            '  [garments.blend] applies only to GARMENT_FIGURES, and only from the bundle:\n'
+            '  garments are authored in its coordinate space. See main().')
+    return argv[0], argv[1].rstrip('/'), (argv[2] if len(argv) == 3 else None)
 
 
 # ---------------------------------------------------------------- measurement
@@ -248,6 +289,110 @@ def measure(obj):
 
     return {'floor': z0, 'top': z1, 'height': height, 'crotch': crotch, 'ankle': ankle,
             'knee': knee, 'armpit': armpit, 'neck': neck}
+
+
+def facing(obj, m):
+    """Which way the figure faces, as a sign on y. The bundle's meshes face -Y.
+
+    Measured rather than assumed, and the measurement is not the obvious one. Two plausible
+    tests were tried against real figure geometry and both reported the wrong sign:
+
+    1. "Which extreme overhangs the head's bbox midline further" is a TAUTOLOGY — mid is
+       (min+max)/2, so the two distances are equal by construction.
+    2. "The centroid sits behind the bbox centre, because a skull is a volume and a nose is
+       a spike" is a real argument and still wrong here: the face carries eyes, nose and
+       lips, so its vertices outnumber the cranium's and drag the centroid forward.
+
+    That same density is the signal, used directly. Measured on a library figure: ~1,000
+    vertices per 2 cm slice at the face against ~60 at the back of the skull. Both wrong
+    versions produced exactly one symptom — a hair bun on the figure's face — which no
+    grounding or bounding-box check would ever catch. See STATE.md, "Derived-garment spike".
+    """
+    head = [v for v in world_verts(obj) if v.z > m['neck']]
+    ys = [v.y for v in head]
+    lo, hi = min(ys), max(ys)
+    quarter = (hi - lo) * 0.25
+    front = len([y for y in ys if y < lo + quarter])
+    back = len([y for y in ys if y > hi - quarter])
+    return -1.0 if front > back else 1.0
+
+
+def build_hair(obj, m, style):
+    """Coarse hair silhouette: a cap fitted to the head, optionally with a gathered mass.
+
+    THE CAP IS A FITTED ELLIPSOID, NOT AN OFFSET COPY OF THE SCALP. Deriving it by
+    duplicating skull faces and pushing them along their normals produces a crown of spikes:
+    the head is the densest, most detailed part of the mesh, so a per-vertex offset amplifies
+    every bump in it, and the band's cut edge shows as a ragged fringe. A fitted primitive
+    has neither problem and is the right level of description for a silhouette anyway.
+
+    Returned unbound and unparented; main() parents these to the head bone.
+    """
+    if style == 'bare':
+        return []
+
+    front = facing(obj, m)
+    head_h = m['top'] - m['neck']
+    head = [v for v in world_verts(obj) if v.z > m['neck'] + head_h * 0.25]
+    cx = (min(v.x for v in head) + max(v.x for v in head)) / 2
+    cy = (min(v.y for v in head) + max(v.y for v in head)) / 2
+    half_x = (max(v.x for v in head) - min(v.x for v in head)) / 2
+    half_y = (max(v.y for v in head) - min(v.y for v in head)) / 2
+    crown = m['top']
+
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=1.0, segments=32, ring_count=16,
+                                         location=(cx, cy, crown - half_y * 0.86))
+    cap = bpy.context.active_object
+    cap.name = 'hair-cap'
+    cap.scale = (half_x + HAIR_OFFSET, half_y + HAIR_OFFSET, half_y * 0.96 + HAIR_OFFSET)
+    bpy.ops.object.transform_apply(scale=True)
+
+    # Cut the face out of the cap. This is the asymmetry the whole feature exists for — it
+    # is what gives a symmetric skull a front and a back at 35 mm. Cut HIGH: near the jaw it
+    # leaves a ring framing the face, which renders as a bonnet rather than a hairline.
+    bm = bmesh.new()
+    bm.from_mesh(cap.data)
+    face_cut = cy + front * half_y * 0.34
+    drop = [f for f in bm.faces
+            if (cap.matrix_world @ f.calc_center_median() - Vector((0, face_cut, 0))).y * front > 0
+            and (cap.matrix_world @ f.calc_center_median()).z < crown - half_y * 0.62]
+    bmesh.ops.delete(bm, geom=drop, context='FACES')
+    bm.to_mesh(cap.data)
+    bm.free()
+    cap.modifiers.new('solidify', 'SOLIDIFY').thickness = 0.012
+    pieces = [cap]
+
+    if style == 'gathered':
+        bpy.ops.mesh.primitive_uv_sphere_add(
+            radius=BUN_RADIUS, segments=20, ring_count=12,
+            location=(cx, cy - front * (half_y + BUN_RADIUS * 0.45),
+                      m['neck'] + head_h * 0.62))
+        bun = bpy.context.active_object
+        bun.name = 'hair-bun'
+        pieces.append(bun)
+    return pieces
+
+
+def parent_to_head(objs, rig):
+    """Rigid-parent hair to the head bone instead of skinning it to the whole rig.
+
+    Automatic weighting is right for a body and wrong for hair: hair does not deform, it
+    RIDES the skull, and bone-heat weighting on a detached shell near several bones can
+    smear it across the neck and spine. Bone parenting is both more robust and more honest
+    about what the geometry is. bake_and_export() freezes it the same way either route —
+    it clears the parent and keeps the evaluated world matrix.
+    """
+    if not objs:
+        return
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.mode_set(mode='POSE')
+    rig.data.bones.active = rig.data.bones['head']
+    for o in objs:
+        o.select_set(True)
+    rig.select_set(True)
+    bpy.ops.object.parent_set(type='BONE')
+    bpy.ops.object.mode_set(mode='OBJECT')
 
 
 def limb_x(obj, z, tol=0.02):
@@ -612,54 +757,79 @@ def apply_pose(rig, pose):
 # ---------------------------------------------------------------- export
 
 
-def bake_and_export(obj, rig, pose, path):
-    """Freeze the posed mesh into static geometry, ground it, write the .glb."""
-    # The posed pelvis, captured before any of the transforms below move `baked` around.
-    # The rig sits at the origin and the mesh carries no transform of its own at this
-    # point, so armature space, world space and the baked mesh's local space coincide —
-    # which is what lets this one point be pushed through `baked.matrix_world` later.
+def bake_and_export(objs, rig, pose, path):
+    """Freeze the posed meshes into static geometry, ground them, write one .glb.
+
+    Takes a LIST because a figure may be a body plus hand-authored garments (PRD §11
+    v1.10). Each is bound to the same rig and each carries its own Armature modifier, so
+    each bakes the same way; what they must not do is bake independently in space.
+    """
+    # The posed pelvis, captured before any transform below moves the bakes around. The rig
+    # sits at the origin and the meshes carry no transform of their own at this point, so
+    # armature space, world space and the baked mesh's local space coincide — which is what
+    # lets this one point be pushed through `baked[0].matrix_world` later.
     pelvis_local = rig.pose.bones['spine'].matrix.to_translation()
 
-    baked = obj.copy()
-    baked.data = obj.data.copy()
-    bpy.context.collection.objects.link(baked)
+    baked = []
+    for obj in objs:
+        b = obj.copy()
+        b.data = obj.data.copy()
+        bpy.context.collection.objects.link(b)
 
-    bpy.ops.object.select_all(action='DESELECT')
-    baked.select_set(True)
-    bpy.context.view_layer.objects.active = baked
-    for mod in list(baked.modifiers):
-        # Applying the Armature modifier writes the pose into the vertices; the rig is
-        # then dead weight and is never exported. MULTIRES goes too — the base cage is
-        # ~10.5k quads, which is blocking-appropriate, and sculpt levels are not.
-        if mod.type == 'MULTIRES':
-            baked.modifiers.remove(mod)
-        else:
-            bpy.ops.object.modifier_apply(modifier=mod.name)
-    baked.parent = None
-    baked.matrix_world = obj.matrix_world
+        bpy.ops.object.select_all(action='DESELECT')
+        b.select_set(True)
+        bpy.context.view_layer.objects.active = b
+        for mod in list(b.modifiers):
+            # Applying the Armature modifier writes the pose into the vertices; the rig is
+            # then dead weight and is never exported. MULTIRES goes too — the base cage is
+            # ~10.5k quads, which is blocking-appropriate, and sculpt levels are not.
+            if mod.type == 'MULTIRES':
+                b.modifiers.remove(mod)
+            else:
+                bpy.ops.object.modifier_apply(modifier=mod.name)
+        b.parent = None
+        b.matrix_world = obj.matrix_world
 
-    # Whole-figure orientation (lying), about the world x axis, around the origin.
-    if pose.get('rootRotX'):
-        baked.matrix_world = Matrix.Rotation(pose['rootRotX'], 4, 'X') @ baked.matrix_world
+        # Whole-figure orientation (lying), about the world x axis, around the origin.
+        if pose.get('rootRotX'):
+            b.matrix_world = Matrix.Rotation(pose['rootRotX'], 4, 'X') @ b.matrix_world
+        baked.append(b)
 
-    # Base-anchored, derived: PRD §11 v1.7's first output convention.
-    bpy.context.view_layer.update()
-    lo = min((baked.matrix_world @ v.co).z for v in baked.data.vertices)
-    baked.location.z -= lo
-    # Centre on the PELVIS in plan, so position.x/z in a scene mean what they say.
+    # GROUND AND CENTRE THE GROUP, NOT EACH PIECE. Grounding a coat separately would drop
+    # its hem to the floor independently of the feet and shear the figure apart; centring
+    # separately would slide it sideways off the body. One offset, applied to everything.
     #
-    # Not on the bounding box, which is what this did until 13 August. The two agree to
-    # four decimal places on every bilaterally symmetric pose — measured across all ten —
-    # so the change is a no-op for the library as it stood. They stop agreeing the moment
-    # a pose is asymmetric: reach one arm out and the bounding box centre slides toward it,
-    # taking the whole body off the origin with it, and a character placed at x=2 stands
-    # somewhere else. The pelvis is the root of the chain and no limb can move it.
+    # Base-anchored, derived: PRD §11 v1.7's first output convention. Note the consequence
+    # for garment authoring — a hem modelled below the soles lifts the whole figure off the
+    # floor to satisfy min.z = 0, and the feet then hover. Hems stop at the ankle.
     bpy.context.view_layer.update()
-    baked.location.x -= (baked.matrix_world @ pelvis_local).x
+    lo = min(min((b.matrix_world @ v.co).z for v in b.data.vertices) for b in baked)
+    # Centre on the PELVIS in plan, so position.x/z in a scene mean what they say, measured
+    # on the BODY (the first entry) and applied to every piece.
+    #
+    # Not on the bounding box, which is what this did until 13 August. The two agree to four
+    # decimal places on every bilaterally symmetric pose, so the change was a no-op for the
+    # library as it stood. They stop agreeing the moment a pose is asymmetric: reach one arm
+    # out and the bounding box centre slides toward it, taking the whole body off the origin
+    # with it, and a character placed at x=2 stands somewhere else. The pelvis is the root of
+    # the chain and no limb can move it. A garment cannot move it either, which is the second
+    # reason to measure here rather than over the group.
+    bpy.context.view_layer.update()
+    dx = (baked[0].matrix_world @ pelvis_local).x
+    for b in baked:
+        b.location.z -= lo
+        b.location.x -= dx
 
     bpy.ops.object.select_all(action='DESELECT')
-    baked.select_set(True)
-    bpy.context.view_layer.objects.active = baked
+    for b in baked:
+        b.select_set(True)
+    bpy.context.view_layer.objects.active = baked[0]
+    if len(baked) > 1:
+        # One object, so the app's palette re-material applies one colour to the figure.
+        # A body and a coat arriving as two objects would take two materials and read as a
+        # collage rather than a person (PRD §11 v1.5 assigns per object).
+        bpy.ops.object.join()
+    baked = bpy.context.active_object
 
     # Normalise shading before export, for two reasons that happen to have one fix.
     #
@@ -722,9 +892,42 @@ def load_figure(blend, body):
     verts = world_verts(obj)
     mid_x = (min(v.x for v in verts) + max(v.x for v in verts)) / 2
     mid_y = (min(v.y for v in verts) + max(v.y for v in verts)) / 2
-    obj.location -= Vector((mid_x, mid_y, 0))
+    shift = Vector((-mid_x, -mid_y, 0))
+    obj.location += shift
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-    return obj
+    # The shift is returned because garments are authored against the body's position in
+    # the source bundle and have to travel with it. Baking it into the body and not the
+    # coat would leave the coat standing where the figure used to be.
+    return obj, shift
+
+
+def load_garments(blend, names, shift):
+    """Link hand-authored garment meshes into the current scene, aligned to the body.
+
+    The contract, and the reason there is no fitting step here: a garment is MODELLED ON
+    the base mesh it belongs to, in the base mesh's own coordinates. That is what option 2
+    of PRD §11 v1.10 buys — no proxy system, no shrinkwrap, no per-pose refitting — and it
+    is only true if the author models against the same body the pipeline poses.
+    """
+    if not names:
+        return []
+    out = []
+    with bpy.data.libraries.load(blend) as (src, dst):
+        missing = [n for n in names if n not in src.objects]
+        if missing:
+            raise SystemExit(f'\nGarment blend {blend} has no object(s): {", ".join(missing)}\n'
+                             f'It holds: {", ".join(sorted(src.objects))}\n')
+        dst.objects = list(names)
+    for obj in dst.objects:
+        bpy.context.collection.objects.link(obj)
+        bpy.ops.object.select_all(action='DESELECT')
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        obj.location += shift
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        out.append(obj)
+    return out
 
 
 def load_standing_glb(src_dir, suffix):
@@ -775,24 +978,60 @@ def load_standing_glb(src_dir, suffix):
 
 
 def main():
-    src, out = args()
+    src, out, garment_blend = args()
     from_glb = not src.endswith('.blend')
     if not from_glb:
         require(src)
 
-    for suffix, body in FIGURES.items():
-        obj = load_standing_glb(src, suffix) if from_glb else load_figure(src, body)
+    # Bare figures first, then clothed ones. Both go through the same path: the only
+    # difference is how many meshes are bound to the rig before the poses are applied.
+    jobs = [(suffix, body, ()) for suffix, body in FIGURES.items()]
+    jobs += [(suffix, body, garments) for suffix, (body, garments) in GARMENT_FIGURES.items()]
+
+    for suffix, body, garments in jobs:
+        if garments and not garment_blend:
+            raise SystemExit(f'\nFigure "{suffix}" needs garments {list(garments)} but no '
+                             'garment .blend was given.\n'
+                             'Pass it as the third argument. See assets-src/README.md.\n')
+        if garments and from_glb:
+            # Garments are authored against the body's position inside the CC0 bundle, and
+            # are placed by the shift `load_figure` returns. An already-exported
+            # standing.glb has been ground and plan-centred, so that shift no longer
+            # describes it and a garment would land off the body. Bare figures rebuild
+            # from a .glb perfectly well; clothed ones need the bundle.
+            raise SystemExit(f'\nFigure "{suffix}" has garments, which need the CC0 bundle '
+                             '.blend as <source>.\n'
+                             'Rebuilding from exported .glb files supports bare figures '
+                             'only.\n')
+        obj, shift = ((load_standing_glb(src, suffix), Vector((0.0, 0.0, 0.0)))
+                      if from_glb else load_figure(src, body))
         m = measure(obj)
         label = f'standing{suffix}.glb' if from_glb else body
         print(f'LANDMARKS[{label}] ' + '  '.join(f'{k}={v:.3f}' for k, v in m.items()))
 
         rig = build_armature(obj, m)
-        bind(obj, rig, m)
+        pieces = [obj] + load_garments(garment_blend, garments, shift)
+        hair = build_hair(obj, m, HAIR.get(suffix, 'cropped'))
+        # Every piece binds to the same rig with the same automatic weighting. Proven on a
+        # placeholder garment through a seated pose before this path was written — see
+        # STATE.md, "Garment deform spike".
+        #
+        # `m` is the BODY's measurements, and `resolve_arm_bleed` (inside `bind`) uses them
+        # to locate the arm band. A garment worn on that body occupies nearly the same
+        # space, so the same correction applies — and it is needed, because bone heat hands
+        # a coat's flank to the arm bones exactly as it did the body's, and a raised arm
+        # would drag the hem. NOT VERIFIED against real garment geometry: GARMENT_FIGURES
+        # ships empty, so this path has never run. Check it against the first garment.
+        for piece in pieces:
+            bind(piece, rig, m)
+        # Hair rides the skull rather than deforming, so it is bone-parented, not skinned.
+        parent_to_head(hair, rig)
+        pieces += hair
 
         for name, pose in POSES.items():
             apply_pose(rig, pose)
             bpy.context.view_layer.update()
-            bake_and_export(obj, rig, pose, f'{out}/{name}{suffix}.glb')
+            bake_and_export(pieces, rig, pose, f'{out}/{name}{suffix}.glb')
             print(f'wrote {out}/{name}{suffix}.glb')
 
 
