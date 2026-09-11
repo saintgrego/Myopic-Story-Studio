@@ -3073,7 +3073,8 @@ through #35. `git rev-list --left-right --count HEAD...origin/main` returns
 `0  0`: this container's checkout *is* `origin/main`, so the drift is on the Mac side, not
 here.
 
-The brief's eight-row size table matches `60ba0e8` **byte for byte**. That is how the drift was
+The brief's eight-row size table reproduces `60ba0e8`'s byte *counts* **exactly, on all eight
+rows** — it is a size table, and the distinction matters below. That is how the drift was
 identified, independent of the commit graph:
 
 | file | brief / `60ba0e8` | `708602a` |
@@ -3104,9 +3105,11 @@ fidelity check; it catches the ~156 KB fallback-generator signature and nothing 
    them the size column would still read as a pass. The comparison fails on the baseline, not
    on the output — and would do so while looking half-green.
 2. The library is **30 files, not 8**. A rebuild checked only against the eight would leave
-   22 unverified — and the sequencing trap recorded in the 8 September entry still applies:
-   `build:poses` regenerates from the script's `POSES` table, so a mismatched script and
-   `poses.json` fails `poses.test.ts`'s path→file direction silently until the suite runs.
+   22 unverified. The sequencing trap recorded in the 8 September entry is **no longer live**:
+   it was conditional on v1.10 landing *before* the manikin poses, and the merge went the
+   recommended way round — #34 then #35. `POSES` in `build-pose-glbs.py` now holds **15
+   keys**, matching `poses.json`'s 15 bare names, so `build:poses` regenerates the whole
+   thirty. Counted in the script, not assumed from the merge order.
 
 **Pull `main` on the Mac before Step 1, then re-record the table for all thirty files.** The
 table below is that record, taken at `708602a`.
@@ -3114,8 +3117,9 @@ table below is that record, taken at `708602a`.
 The same staleness explains the brief's suite-count expectation. It predicted **151 / 10
 suites** (**11** with the untracked `spike.test.ts`). The 8 September entry already recorded
 the move to 209/12; at `708602a` it is **239 / 13**. `spike.test.ts` is untracked, so it is
-absent from any clone and the `--testPathIgnorePatterns=spike` run was identical to the plain
-one — that discrepancy cannot be reproduced anywhere but the Mac.
+absent from any clone: `CI=true npm run test:ci -- --testPathIgnorePatterns=spike` was run and
+returned the same **13 / 239** as the plain gate. That discrepancy cannot be reproduced
+anywhere but the Mac.
 
 ### Gates, verbatim, on `708602a`
 
@@ -3203,5 +3207,7 @@ the two generators are one reflexive `node` invocation apart.
    against the table above.
 3. Step 2's three live parses — set-piece regression, pose selection, flag path — and the
    on-disk `.myo` check for `sets` / `set_visibility` in snake_case.
-4. Re-run the gates on the Mac. 239/13 is the figure to expect; **11 suites** there, since
-   `spike.test.ts` is untracked and local.
+4. Re-run the gates on the Mac. Expect **14 suites** — the 13 tracked here plus the
+   untracked, local-only `spike.test.ts` — and 239 tests plus whatever spike contributes.
+   **Not the 11 the brief predicted**: that adds spike to a 10-suite tree that no longer
+   exists.
