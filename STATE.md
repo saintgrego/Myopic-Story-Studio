@@ -2127,6 +2127,9 @@ worse than one that cycles.
 - **`npm run dev` dies instantly** with `options.allowedHosts[0] should be a non-empty
   string` — the container exports `HOST` as an empty string and CRA passes it straight
   through. `HOST=localhost npm start`. Nothing in the repo needs changing.
+  **[Overturned 2026-09-11: cause and fix are both wrong. `HOST` is unset here, not empty,
+  and `HOST=localhost` fails identically — the real cause is a non-private container IP.
+  See "Test-scene run on a remote clone (2026-09-11)".]**
 - **`npx tsc` resolved a global TypeScript 6.0.2** because `node_modules/` was not installed,
   and failed on `moduleResolution: node10` — which looks exactly like a real tsconfig
   problem. Confirm `npx tsc --version` says **4.9.5** before believing the typechecker.
@@ -3053,3 +3056,92 @@ divergent work, belong in a further amendment once that sweep runs.
 
 The four remote branches above are **no longer in that category** — they are read, measured
 and ordered. What remains for them is the merge itself, and hunk 4's design question.
+
+---
+
+## Test-scene run on a remote clone (2026-09-11): the app renders end to end, and the documented CRA fix is wrong
+
+**A saved scene loads and renders correctly in a fresh container** — but `npm run dev` cannot
+be used to do it, and the workaround recorded on 11 August does not work. Both halves below
+were measured rather than reasoned.
+
+### The dev server cannot start here, and `HOST=localhost` does not fix it
+
+`npm run dev` brings the backend up (`Myopic backend listening on :4000`) and kills the web
+half instantly with **`options.allowedHosts[0] should be a non-empty string`** — the same
+error the 11 August day summary records. That entry's diagnosis (*"the container exports
+`HOST` as an empty string"*) and its fix (*"`HOST=localhost npm start`"*) are **both wrong
+for this container**:
+
+- `env | grep -E '^HOST'` returns **nothing**. `HOST` is unset, not empty.
+- `HOST=localhost npm start` and `HOST=0.0.0.0 npm start` **fail identically**, each run to a
+  100-second timeout, each exiting `1` on the same schema error.
+
+The real cause is inside CRA's own utilities.
+`react-dev-utils/WebpackDevServerUtils.js` assigns `lanUrlForConfig = address.ip()` and then
+**discards it unless it matches the private-range regex** (`10.`, `172.16–31.`, `192.168.`).
+This container's address is **`192.0.2.2`** — TEST-NET-1, documentation space, not private —
+so `lanUrlForConfig` ends up `undefined`. `start.js` passes exactly that value through as
+`allowedHost`, and `webpackDevServer.config.js:46` uses it unguarded whenever a `proxy` field
+exists: `allowedHosts: disableFirewall ? 'all' : [allowedHost]`. `package.json:28` sets
+`"proxy": "http://localhost:4000"`, so `disableFirewall` is false and the array is
+`[undefined]`.
+
+**`HOST` is not in that path at all**, which is why setting it changes nothing — and with
+`HOST=localhost`, `isUnspecifiedHost` is false and `lanUrlForConfig` is never even assigned.
+
+CRA's own escape hatch for this, `DANGEROUSLY_DISABLE_HOST_CHECK=true`, is **refused by the
+auto-mode permission classifier** in a Claude Code web session, so it is not available from
+inside one either.
+
+### What does work: build once, serve it beside the real backend
+
+`npm run build`, then a ~25-line scratch Express host that serves `build/` and forwards
+`/api/*` to the backend on `:4000`. **It touches nothing in the repo** — it lives in the
+session scratchpad, and `git status --porcelain` stayed empty throughout. The backend runs
+normally (`npm run server`); only CRA's dev server is bypassed, so hot reload is the only
+loss. Anything needing the SPA in this container should do that rather than fight
+`allowedHosts`.
+
+### Evidence: three gates green, two scenes rendered
+
+Fresh `npm install` (868 packages), then:
+
+- `npx tsc --noEmit` — clean, with `npx tsc --version` confirming **4.9.5** (the 11 August
+  global-TypeScript trap, checked rather than assumed).
+- `npm run test:ci` — **239 passed, 239 total**, 13 suites, 4.8 s.
+- `npm run build` — succeeded.
+
+Driven headless with Playwright against the static host (Chromium with
+`--use-angle=swiftshader`; the live context reports **WebGL 2.0**, canvas 958×768):
+
+- **`Two Detectives — Office at Night`** loads over `GET /api/scenes/<file>` and renders both
+  glTF figures, desk, desk lamp, camera frustum and the four-frame storyboard strip.
+  **Zero console errors, zero `pageerror`s, zero `[?]` sentinels in the DOM.**
+- The `View: Free` / `View: Camera` toggle works; the 35mm frame is a clean two-shot.
+- **`Pier at Dawn — Solitary Woman`** renders sky dome, horizon and fog as specified.
+
+Panels were opened by seeding `localStorage` (`myopic.hierarchyOpen`, `myopic.propertiesOpen`)
+before first paint, and the scene was selected **by `<option>` value — the `.myo` filename** —
+never by index, per the Milestone 2/4 rule.
+
+### One finding, and it is data rather than code
+
+In `Pier at Dawn`, **the figure is sunk 0.3 m into the pier.** The prop is a box
+`1.5 × 0.3 × 10` at `y=0`, so the renderer lifts it by half its vertical extent and the deck
+top lands at `y=0.3`; `char_01` sits at `y=0`. **Both objects obey the base-anchored
+convention exactly** — the character is standing on the floor, which is where the parse put
+her.
+
+**The gap is in the parser: it has no notion of resting one object on top of another.** "sits
+alone at the end of a wooden pier" produced a correct pier and a correct figure with no
+relation between them. The same shape shows in `Two Detectives`, where the seated figure's
+knees read through the desk front. This wants a decision before anyone "fixes" it in
+`Viewport.tsx` — **a renderer that silently lifts characters onto nearby props would break
+the one convention the entire scene model rests on.**
+
+### Not done
+
+**No live parse.** Still no `ANTHROPIC_API_KEY` in this container, as recorded twice on
+2026-08-13. Every scene above came off disk, so **nothing here is evidence about
+`server/parser.js`** — the sinking finding included, read off a `.myo` written 2026-07-31.
