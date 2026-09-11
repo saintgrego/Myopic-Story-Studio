@@ -3068,8 +3068,8 @@ commits out of date**, which invalidates all three.
 
 ### The finding that matters: the brief's baseline predates the arm-weight fix
 
-`origin/main` is `708602a` (#35). `60ba0e8` (#24) is its ancestor by **8 commits** — #28, #29,
-#30, #31, #32, #33, #34, #35. `git rev-list --left-right --count HEAD...origin/main` returns
+`origin/main` is `708602a` (#35). `60ba0e8` (#24) is its ancestor by **8 commits** — PRs #28
+through #35. `git rev-list --left-right --count HEAD...origin/main` returns
 `0  0`: this container's checkout *is* `origin/main`, so the drift is on the Mac side, not
 here.
 
@@ -3087,15 +3087,22 @@ identified, independent of the commit graph:
 | `lying.glb` | 512,448 | 512,448 |
 | `lying-female.glb` | 512,456 | 512,456 |
 
-`git diff --stat 60ba0e8..HEAD -- public/assets/poses/` reports **30 files changed**: 22 pose
-binaries added and both `standing` binaries **rewritten** — the arm-weight bleed fix from #34
-("Add eleven poses, fix arm-weight bleed…"), whose reasoning is in the Track 1c entry above.
+`git diff --name-status 60ba0e8..HEAD -- public/assets/poses/` reports **30 files changed —
+22 added and all 8 modified**. Not two: **every binary in the brief's table has different
+bytes at `708602a`**, confirmed by object hash, the arm-weight bleed fix from #34 ("Add eleven
+poses, fix arm-weight bleed…") whose reasoning is in the Track 1c entry above.
+
+**The size column hides this, which is the trap.** Four of the eight — `sitting-female`,
+`crouching`, `lying`, `lying-female` — are byte-for-byte *different* at an **identical byte
+count**, so a comparison that checks only file size scores them as unchanged. Size is not a
+fidelity check; it catches the ~156 KB fallback-generator signature and nothing finer.
 
 **Two consequences for Step 1, stated plainly.**
 
 1. The brief's step 6 says *"byte-identical is ideal"*. Run against a table recorded at
-   `60ba0e8`, a **correct** rebuild reports a size delta on `standing` and reads as a
-   regression. The comparison would fail on the baseline, not on the output.
+   `60ba0e8`, a **correct** rebuild fails that test on **all eight** files, and on four of
+   them the size column would still read as a pass. The comparison fails on the baseline, not
+   on the output — and would do so while looking half-green.
 2. The library is **30 files, not 8**. A rebuild checked only against the eight would leave
    22 unverified — and the sequencing trap recorded in the 8 September entry still applies:
    `build:poses` regenerates from the script's `POSES` table, so a mismatched script and
