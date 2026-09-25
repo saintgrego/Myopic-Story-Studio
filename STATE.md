@@ -3053,3 +3053,44 @@ divergent work, belong in a further amendment once that sweep runs.
 
 The four remote branches above are **no longer in that category** — they are read, measured
 and ordered. What remains for them is the merge itself, and hunk 4's design question.
+
+---
+
+## PRD v2.0 adopted — mannequin articulation (2026-09-25): DOCS ONLY
+
+**PRD v2.0 adopted: mannequin articulation in scope. Docs-only commit; no code changed.
+Implementation pending (rig, pose model, parser, gizmo/sliders, foot IK, migration shim).**
+
+What the amendment does, all in `PRD.md`: header bumped to **2.0** with a changelog entry;
+§2 non-goal #7 reversed for rigging/skeletons/IK/joint posing (morph targets keep #7), #8–#10
+added (runtime import of external/rigged assets, hand IK and IK against set geometry, finger
+articulation), #6 restated to name keyframe animation; §3 gains a **"v2.0 Articulation"**
+group of nine closed decisions; §5 specifies `FigurePose` as a `scene.ts` addition — **in the
+PRD only, not in `src/`** (`grep -r FigurePose myopic-studio/src` returns nothing); §11 gets a
+v2.0 entry recording the `poses.json` format change and the passages in v1.2/v1.7/v1.8/v1.10
+it supersedes, which are left as written.
+
+**Version-number note.** The brief described the PRD's latest version as v1.5. There is one
+PRD (`PRD.md`); its header read **1.2** (never bumped past the first amendment) and §11 ran to
+**v1.10**. The header now reads 2.0 and the v2.0 entry follows v1.10.
+
+**Heads-up for implementation.** `CLAUDE.md` still says "A pose is a mesh, not a field" and
+"There is no `pose` field anywhere". Both become false the moment phase 2 lands; update
+`CLAUDE.md` in that commit. It was deliberately not touched here (docs scope was PRD + STATE).
+
+### Gate evidence (run sequentially from `myopic-studio/`, after `npm ci`, on the edited tree)
+
+1. `npx tsc --noEmit` → exit 0, no output.
+2. `npm run test:ci` → **13 suites, 239 tests passed**, exit 0.
+3. `npm run build` → **"Compiled successfully."**, exit 0.
+
+`git diff --stat` touches `PRD.md` and `STATE.md` only.
+
+### Open items — v2.0 implementation phases (all NOT STARTED)
+
+1. [ ] **Rig** — 19-joint Mixamo-named skeleton on the mannequin; loader strips `mixamorig:`.
+2. [ ] **Pose model** — `FigurePose` in `scene.ts`; `poses.json` rows become per-joint rotation tables.
+3. [ ] **Parser** — base pose id plus relative tweaks, converted to absolute rotations before writing.
+4. [ ] **Gizmo and sliders** — one override store; soft-limit warnings in the properties panel.
+5. [ ] **Foot IK** — plant feet on a flat floor at `y = 0`, hard-clamped.
+6. [ ] **Migration shim** — legacy `standing`/`sitting`/`crouching` GLB references → named poses; legacy pose GLBs retired after.

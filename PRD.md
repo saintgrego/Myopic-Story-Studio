@@ -1,9 +1,13 @@
 # PRD — Myopic! 3-D Studio
 
-**Version:** 1.2
-**Date:** 13 July 2026 (amended 31 July 2026 — see section 11)
+**Version:** 2.0
+**Date:** 13 July 2026 (amended 31 July 2026 — see section 11; latest amendment 25 September 2026, v2.0)
 **Supersedes:** `myopic-3d-studio.md` v0.1 (28 April 2026), which remains valid as a component reference.
 **Owner:** Gregory Jericho
+
+**Changelog** (v1.1–v1.10 are recorded in full in section 11):
+
+- **25 September 2026 — v2.0** — Mannequin articulation brought into scope; §2 non-goal reversed; §3 decisions 9 items added; schema FigurePose added; poses.json format change.
 
 ---
 
@@ -34,8 +38,11 @@ These are **explicitly out of scope**. Do not build them. Do not scaffold them "
 3. **No voice or dictation input.** Typing only.
 4. **No multi-user, no cloud, no sync, no accounts.** Single-user, local, filesystem-only.
 5. **No PDF export.** Deferred.
-6. **No animation or camera movement playback.** The `movement` field is stored as metadata only; nothing moves.
-7. **No rigging, skeletons, IK, manual joint posing, morphs, or facial expressions — narrowed in v1.2, see section 11.** Characters may take a *posture* by selecting from a library of static baked-pose meshes (a sitting figure is a different `.glb` than a standing one). Nothing articulates at runtime: no bones, no pose editor, no per-joint control. Figures remain static — **and, narrowed in v1.7, may be authored figure meshes rather than proxy geometry; a rig may be used to produce them, but nothing rigged ships in the `.glb`.**
+6. **No animation or camera movement playback.** The `movement` field is stored as metadata only; nothing moves. **Restated in v2.0: no keyframe animation — Myopic remains a stills tool.** Articulation (v2.0) poses a still; it never animates between poses.
+7. **No morph targets** — neither expressions nor body shapes. *(v2.0: this item previously also ruled out rigging, skeletons, IK and manual joint posing; that part is reversed — mannequin articulation is in scope, see section 3 "v2.0 Articulation" and section 11 v2.0.)*
+8. **No runtime import of external or rigged assets.** Daz figures remain a future option; the Mixamo bone naming in section 3 was chosen to ease that path, not to open it.
+9. **No hand IK, and no IK against set geometry.** Foot IK onto a flat floor is the only IK in scope (section 3, v2.0 decision 8).
+10. **No finger articulation.**
 
 **Rendering scope is deliberately absent from this list.** v1.0 carried a "no photorealistic rendering" non-goal here; it was removed in v1.1 and replaced by section 11, which is now the only place that governs how the viewport is allowed to look. Read it before building anything that changes the picture. Everything above is unchanged and still binding.
 
@@ -51,6 +58,18 @@ These are settled. Do not re-open them or propose alternatives.
 4. **Asset thumbnails:** Moot — no asset browser in V1.
 5. **Multi-user sync:** None. Single-user, local.
 6. **Asset format:** glTF/GLB is the only external mesh format V1 supports. Not `.duf`, not `.fbx`, not `.obj`.
+
+### v2.0 Articulation (closed 25 September 2026)
+
+1. **Skeleton:** Mixamo-style bone names, stored **without** the `mixamorig:` prefix. The loader strips the prefix on import.
+2. **Joint set (19):** `Hips`, `Spine`, `Spine1`, `Spine2`, `Neck`, `Head`, plus Left/Right `Shoulder`, `Arm`, `ForeArm`, `Hand`, `UpLeg`, `Leg`, `Foot`.
+3. **Pose model:** a named base pose plus per-joint overrides. Overrides are **absolute** local rotations, never deltas.
+4. **Rotation format:** Euler XYZ in degrees in the schema; converted to quaternions internally.
+5. **Parser: hybrid.** The LLM returns a base pose id plus small relative tweaks; the parser converts the tweaks to absolute rotations before writing.
+6. **Editing:** a rotation gizmo on the selected joint **and** properties-panel sliders, both writing to the same override store.
+7. **Limits:** soft limits for manual editing (warn in the properties panel, allow the value); the IK solver clamps hard.
+8. **IK:** feet only, planting onto a flat floor at `y = 0`.
+9. **Migration:** a loader shim maps legacy `standing`/`sitting`/`crouching` GLB references to named poses.
 
 ---
 
@@ -83,6 +102,26 @@ Carry the parameter definitions forward from `myopic-3d-studio.md` sections 3.1�
 - **Camera:** shot type, angle, focal length (mm), depth of field, focus subject, XYZ position, movement (metadata only), aspect ratio. **The focal length must genuinely drive the Three.js camera FOV.** A 35mm and an 85mm must look different. **Focus subject (v1.2 track) aims the shot camera**, and **depth of field is read by the viewport as of v1.3** — as a computed near/far focus readout and ground-plane markers, never as rendered blur. See section 11.
 - **Characters:** figure ID, position XYZ, rotation, scale, visibility, `mesh` reference. Drop expression and costume — nothing to attach them to. **Costume is narrowed in v1.10:** there is now something to attach it to (an authored figure, v1.7), so wardrobe and coarse hair silhouette are baked into the figure the `mesh` reference already names. Costume as a *field* stays dropped, and expression stays dropped entirely. **Posture (v1.2) is not a new field:** a pose is expressed entirely through the existing `mesh` reference — `/assets/poses/sitting.glb` *is* the sitting pose. See section 11 for why.
 - **Props:** prop ID, position, rotation, scale, visibility, `mesh` reference. **The mesh may be a library proxy (v1.4):** `/assets/props/sofa.glb` *is* the sofa, on the same "the mesh is the object type" reasoning as poses. See section 11.
+
+### Figure pose (v2.0 — specified, not yet implemented)
+
+The following addition to `src/types/scene.ts` is **specified here and not yet implemented**; it does not exist in `src/` as of this amendment. It supersedes v1.2's "a pose is a mesh, not a field" for articulated figures (section 11 v2.0).
+
+```ts
+type JointName =
+  | 'Hips' | 'Spine' | 'Spine1' | 'Spine2' | 'Neck' | 'Head'
+  | `${'Left' | 'Right'}${'Shoulder' | 'Arm' | 'ForeArm' | 'Hand' | 'UpLeg' | 'Leg' | 'Foot'}`;
+
+type EulerDeg = [x: number, y: number, z: number];
+
+interface FigurePose {
+  base: string;                                     // id in poses.json
+  overrides?: Partial<Record<JointName, EulerDeg>>; // absolute, local space
+  plantFeet?: boolean;                              // default true
+}
+```
+
+**Content format (v2.0):** `poses.json` rows change from GLB paths to per-joint rotation tables. The legacy pose GLBs are retired once the loader shim (section 3, v2.0 decision 9) is in place.
 
 ### Scene file (`.myo`)
 
@@ -504,3 +543,25 @@ Sleeves need the arm's axis and trousers need each leg's; a ring has neither. Pr
 - [ ] `npx tsc --noEmit`, `npm run test:ci` and `CI=true npm run build` stay green.
 
 **Deliberately not decided here:** whether *props* ever gain authored geometry (still open, as v1.7 left it), and whether the derived-garment approach or a second CC0 source is the long-term pipeline — that is settled by looking at the first export, not by argument.
+
+### v2.0 — 25 September 2026: mannequin articulation
+
+**Directed by the owner on 25 September 2026.** This is a major version because it reverses a section 2 non-goal and adds a group of section 3 closed decisions, rather than narrowing either. **Docs only: nothing in this amendment is implemented yet.**
+
+**What changed in this document:**
+
+- **Section 2, non-goal #7 reversed in part.** Rigging, skeletons, IK and manual joint posing are removed from the non-goals; the procedural mannequin may now be articulated. Morph targets stay out and keep #7. Three non-goals are added (#8 runtime import of external/rigged assets, #9 hand IK and IK against set geometry, #10 finger articulation), and #6 is restated to name keyframe animation explicitly.
+- **Section 3 gains a "v2.0 Articulation" group** of nine closed decisions: Mixamo-style bone names without the `mixamorig:` prefix, a 19-joint set, base pose plus absolute overrides, Euler XYZ degrees in the schema, a hybrid parser, gizmo and sliders sharing one override store, soft manual limits with hard IK clamps, feet-only IK onto `y = 0`, and a loader shim for legacy pose GLBs.
+- **Section 5 specifies `FigurePose`** as a `scene.ts` addition — specified, not implemented.
+- **Content format:** `poses.json` rows change from GLB paths to per-joint rotation tables; legacy pose GLBs are retired once the loader shim is in place.
+
+**What this supersedes, recorded here rather than rewritten in place.** Earlier amendments state that rigging, IK and pose editors stay out, and that a pose is a mesh rather than a field — v1.2 (the core decision and its "still out" list), v1.7 ("nothing rigged ships in the `.glb`"), v1.8 and v1.10 (their "still out" restatements). For the mannequin, those statements are superseded by this amendment. They are left as written as the record of what was decided at the time. Morphs, facial expression and animation remain out as those amendments said.
+
+**Implementation phases (none started):**
+
+1. Rig — the 19-joint Mixamo-named skeleton on the mannequin, with prefix stripping on import.
+2. Pose model — `FigurePose`, base pose plus absolute overrides, `poses.json` as rotation tables.
+3. Parser — base pose id plus relative tweaks, converted to absolute rotations before writing.
+4. Gizmo and sliders — both writing to the same override store, with soft-limit warnings.
+5. Foot IK — feet planted on a flat floor at `y = 0`, hard-clamped.
+6. Migration shim — legacy `standing`/`sitting`/`crouching` GLB references mapped to named poses.
