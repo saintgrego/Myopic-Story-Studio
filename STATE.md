@@ -3057,6 +3057,8 @@ divergent work, belong in a further amendment once that sweep runs.
 The four remote branches above are **no longer in that category** — they are read, measured
 and ordered. What remains for them is the merge itself, and hunk 4's design question.
 
+---
+
 ## Outstanding-gates verification (2026-09-11): all three gates pass, and the brief's pose baseline is eight commits stale
 
 **The brief targeted the owner's Mac; this session ran in a Claude Code web container against
