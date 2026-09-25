@@ -3059,6 +3059,232 @@ and ordered. What remains for them is the merge itself, and hunk 4's design ques
 
 ---
 
+## PRD §11 v1.11 drafted (2026-09-09): the library budget is bytes, not figures — document only
+
+**[Not adopted, 2026-09-25: v1.11 never reached `main` and was superseded by PRD v2.0, which retires
+the per-pose `.glb` library whose size it budgeted. Its one surviving rule — a size cap is
+only real if a test asserts it — was carried into v2.0. See "PRD v2.0 adopted" below.]**
+
+**Nothing was built.** This is the amendment text plus four in-place corrections to earlier
+sections, per §11's own rule that scope is amended before it is built — the same treatment
+v1.10 got on 13 August. No script, `poses.json` row, `.glb` or source file was touched, so
+all three gates are untouched by construction.
+
+**The context the previous entry lacks: all four branches merged this morning**, in the order
+that entry prescribed — #31 `test-coverage`, #32 `nomad-sculpt`, #33 the hygiene log, #34
+`manikin` (poses), #35 `section-11` (v1.10). `git ls-remote --heads origin` now returns
+`main` alone, so the four remote branches are gone as well. Hunk 4's design question — does
+the arm-bleed correction apply to a garment or only to the body it was measured from — was
+resolved **in favour of applying it**, and survives only as a comment in `main()` reading
+`NOT VERIFIED against real garment geometry`. A fuller merge write-up, with the three gates
+run on merged `main`, is the entry below this one — written the same day, once the toolchain
+was installed.
+
+### The finding
+
+v1.10 justified its six-figure roster cap with *"about 2 MB per figure, against 4 MB for the
+eight files that exist today"* and *"Twenty-four files, roughly 12 MB"*. Both were true on 13
+August, when the library held **four** poses. #34 took it to **fifteen** — and #34 and v1.10
+were written in parallel on separate branches and merged the same day, so neither noticed the
+other.
+
+**The cap named one factor of a product and the other factor moved.** That is the transferable
+part; the megabytes are just the symptom. It also went unnoticed because the cap existed only
+as a sentence in the PRD, and prose does not fail a build.
+
+### Measured, on `main` at `708602a`
+
+| | v1.10 assumed | measured | six-figure roster |
+| --- | --- | --- | --- |
+| files | 24 | 30 | 90 |
+| `public/assets/poses/` | ~12 MB | **14.66 MiB** | **~44 MiB** |
+
+- `ls -l public/assets/poses/*.glb` → 15,371,380 bytes over 30 files, mean 512,379 — the
+  files are near-identical in size because every one is the same base mesh posed.
+- `standing.glb`, GLB JSON chunk parsed directly: **one** mesh, one node, 12,010 vertices,
+  21,160 triangles, attributes `POSITION`, `NORMAL`, `TEXCOORD_0`, `extensionsUsed: []`.
+  Buffers: `POSITION` 144,120 B · `NORMAL` 144,120 B · indices 126,960 B · **`TEXCOORD_0`
+  96,080 B**. They sum to 511,280 — the bufferView total — of a 512,356-byte file, so the
+  JSON chunk is ~1 KB and the geometry is all of it.
+
+**`TEXCOORD_0` is 18.8% of every file in a library the PRD forbids from carrying a texture.**
+v1.5's palette re-material discards materials at load, so nothing reads the UVs. An exporter
+default nobody turned off; deleting it is not a compression trade.
+
+### The history dimension, and why it is smaller than it looks
+
+`git count-objects -vH` → pack **15.68 MiB**. Walking `git rev-list --objects --all` through
+`cat-file --batch-check` for blobs under `assets/poses`: **55 distinct blobs, 8.06 MiB on
+disk** — **just over half the repository is pose binaries**, but at ~150 KiB per blob, not
+500 KiB.
+
+The reason was checked rather than assumed, by comparing bufferViews between two files:
+
+| buffer | `standing.glb` vs `sitting.glb` |
+| --- | --- |
+| indices (126,960 B) | **IDENTICAL** |
+| `TEXCOORD_0` (96,080 B) | **IDENTICAL** |
+| `POSITION` (144,120 B) | differs |
+| `NORMAL` (144,120 B) | differs |
+
+**43.5% of every pose file is byte-identical across all poses of the same figure**, which is
+what git deltas away. Compression alone does not do this: `gzip -c standing.glb` gets
+512,356 → 431,533, only 16% off. So a full `build:poses` run costs ~150 KiB per file in the
+pack, roughly 13 MiB for a ninety-file roster — real, but not the 45 MiB the raw sizes imply.
+**Do not repeat the raw number as the history cost.**
+
+### What the amendment decides
+
+In-repo, no Git LFS (closing v1.7's deferred item 4), governed by two ceilings — **640 KiB
+per file** and **44 MiB across `public/assets/`** — both PROPOSED, with the arithmetic shown
+so the owner can move them knowingly. The 44 MiB figure is set deliberately tight: the roster
+fits under it only if the UV drop happens (~39.6 MiB with, ~47 MiB without), so the free
+saving is mandatory rather than optional.
+
+The six-figure roster cap **survives** — it was never purely a storage argument — but it is no
+longer what bounds the library. Authorized to build: dropping `TEXCOORD_0` from pipeline
+output (**`public/assets/custom/` explicitly excluded**, per v1.5's exemption for
+user-supplied assets), and a byte-budget assertion beside `poses.test.ts`'s existing
+`min.y ≈ 0` check. Draco, meshopt, decimation and LFS are all named on the out-list so none
+can arrive later as an unremarkable optimisation — the first two because they put a decoder
+inside the app, decimation because it changes how figures look and that is a §11 rendering
+question, not a storage one.
+
+### Rules worth remembering
+
+- **Cap the product, not a factor.** A limit on figures cannot bound poses × figures. If a
+  budget matters, express it in the unit that is actually scarce.
+- **An unasserted cap is not a cap.** v1.10's failed because nothing could fail on it. The
+  ceilings here are written to be a test, not a paragraph.
+- **Measure the pack, not the working tree, before claiming a history cost.** Same-topology
+  `.glb`s delta to about 30% of their raw size; `.glb` gzips by only 16%, so it is the
+  delta doing the work, not the compression.
+- **Two branches merged the same day can each be correct and jointly wrong.** Neither #34 nor
+  v1.10 contained an error. The stale number appeared in the gap between them, which is
+  exactly where nobody is reviewing.
+
+---
+
+## The five-PR merge, verified (2026-09-09): all three gates green on `main` at `708602a`
+
+**The 8 September entry above predicted a merge order and a design question and then stopped,
+because that session could not run the app's toolchain.** This is the follow-through: the
+merges landed, and `main` has now been put through all three gates in a container with
+`node_modules` actually installed (`npm ci`, 1387 packages, 20 s). **Every number below was
+measured in this session, not quoted from a branch's own log entry.**
+
+### The gates, verbatim, on `708602a`
+
+- `npx tsc --version` → `Version 4.9.5` — checked before trusting the typecheck, per the
+  standing habit.
+- `npx tsc --noEmit` → clean, **exit 0**.
+- `npm run test:ci` → **`Test Suites: 13 passed, 13 total` · `Tests: 239 passed, 239 total`**,
+  4.4 s. Suites: `apiClients`, `storyboardStore`, `sets`, `framing`, `lighting`, `parser`,
+  `dof`, `sceneStore`, `palette`, `props`, `myoFormat`, `poses`.
+- `CI=true npm run build` → **`The build folder is ready to be deployed.`**, exit 0, **zero
+  warnings**. 212.43 kB gzipped JS, 3.8 kB CSS.
+- `git status --porcelain` after both → empty. Neither the install nor the build left a stray
+  file in the tree.
+
+**239 / 13 is the `test-coverage-analysis` figure, unchanged by the other three merges** —
+which is the expected result, not a suspicious one. The 8 September entry already established
+why: `poses.test.ts` loops *inside* single tests rather than using `test.each`, so eleven new
+poses move no counter. The test still does its job — it now walks thirty rows instead of
+eight.
+
+### The merge order held
+
+`#31` test-coverage → `#32` nomad-sculpt → `#33` the hygiene log → `#34` manikin (poses) →
+`#35` section-11 (v1.10). That is the prescribed order with the hygiene log inserted, and the
+reason for it held: `#34` carries `load_standing_glb`, which lets the pipeline run without the
+48 MB CC0 bundle, so it had to precede the amendment that recorded that blocker against
+itself. `git ls-remote --heads origin` now returns **`main` alone** — all four branches are
+deleted remotely as well, which a web session could not have done itself.
+
+### The four conflict hunks, as actually resolved
+
+The 8 September entry predicted four collisions in `scripts/blender/build-pose-glbs.py` and
+prescribed a resolution for three of them. All four landed as prescribed:
+
+| hunk | prediction | as merged |
+| --- | --- | --- |
+| 1. `args()` | "mechanical" — source-or-directory vs. optional third `garments.blend` | **union taken**: `len(argv) not in (2, 3)`, returning `(src, out, garment_blend or None)` |
+| 2. `bake_and_export()` | "v1.10's list version is a superset; take it" | **taken**: `def bake_and_export(objs, rig, pose, path)` |
+| 3. `main()`'s loop | "needs care" — `load_figure` returns a tuple, the `from_glb` branch has no shift | **handled**: `obj, shift = ((load_standing_glb(src, suffix), Vector((0,0,0))) if from_glb else load_figure(src, body))` — the `.glb` path supplies a zero shift, correct because an exported `.glb` is already ground and plan-centred |
+| 4. `bind()` | "the one real design question: does the arm-bleed correction apply to a garment?" | **resolved yes**: `for piece in pieces: bind(piece, rig, m)`, carrying manikin's three-argument signature |
+
+**Hunk 4's reasoning survives only as a comment in `main()`, so it is recorded here.** A
+garment worn on a body occupies nearly the same space, so `resolve_arm_bleed`'s band —
+located from the *body's* measurements `m` — applies to it; and it is needed, because bone
+heat hands a coat's flank to the arm bones exactly as it did the body's, so a raised arm would
+otherwise drag the hem. The comment ends `NOT VERIFIED against real garment geometry`, and
+that is still true: `GARMENT_FIGURES` ships empty, so this path has never executed. **Check it
+against the first garment.**
+
+Ordering inside the loop is worth recording too, because it is not obvious: `build_hair` runs
+before the bind loop, hair is **excluded** from that loop and `parent_to_head`-ed afterwards,
+then appended to `pieces` so it reaches `bake_and_export`. Hair rides the skull; it does not
+skin.
+
+### The sequencing trap was avoided
+
+The 8 September entry's sharpest warning: if v1.10 landed first and `build:poses` were run,
+the export would rebuild a *four*-pose library while `poses.json` claimed thirty, failing
+`poses.test.ts` on 22 rows. Merged `main` is clear of it — the script's `POSES` table holds
+**15 rows** (`standing, sitting, crouching, lying, kneeling, sitting-ground, leaning-back,
+head-down, slumped, arms-raised, walking, pointing, looking-off, turned-to-listen,
+gesturing`) alongside `FIGURES` `['', '-female']`, `HAIR`, and an empty `GARMENT_FIGURES`. A
+rebuild now produces 30 files against 30 `poses.json` rows.
+
+### The library on disk
+
+`node scripts/measure-glb.mjs public/assets/poses` — **all 30 report `grounded`**, `min.y`
+within a rounding error of zero. Standing heights: **1.6900 m** default figure, **1.6393 m**
+`-female`, which is v1.8's legibility argument surviving contact with the exporter. `lying`
+measures 0.29 m tall and runs to −1.69 in z, grounded like the rest.
+
+**Positive evidence that the committed binaries are still bald**, rather than the PRD's word
+for it: parsing all thirty GLB JSON chunks gives **one mesh, one node and exactly 12,010
+vertices in every single file**. Hair is additional geometry however it is exported, so an
+identical vertex count across the library is proof none of it carries any. `npm run build:poses`
+on a machine with Blender remains the outstanding step, exactly as v1.10 recorded.
+
+### A strengthening of v1.11's delta claim, measured library-wide
+
+v1.11 (entry above) established that `indices` and `TEXCOORD_0` are byte-identical between
+`standing.glb` and `sitting.glb`. Extended to all thirty files: **15 of 30 match
+`standing.glb` byte-for-byte on both buffers** — precisely the default figure's fifteen poses.
+The `-female` fifteen share the same *vertex count* but not the same index and UV bytes, so
+the pack holds **two topology bases, not one**. v1.11's wording ("across all poses of the same
+figure") is correct as written; this is the whole-library confirmation of it.
+
+### One finding, small and real
+
+**`myopic-studio/scripts/blender/__pycache__/build-pose-glbs.cpython-311.pyc` is tracked** —
+59,398 bytes of compiled Python committed by `#35`. `.gitignore` has no `__pycache__/` rule,
+so `#33`'s hygiene pass could not have caught it. It is the only tracked build artifact in
+the repo (`git ls-files | grep -E '\.(pyc|log|DS_Store)$'` returns it and nothing else).
+**Fixed on the owner's say-so, same day:** `git rm --cached` (the file stays on disk, being
+regenerable and none of git's business), plus `__pycache__/` and `*.pyc` in `.gitignore`.
+Verified rather than assumed, per the trap `#33` recorded one block below in the same file:
+`git check-ignore -v` reports `.gitignore:8:__pycache__/` against the path, and
+`git ls-files` now matches no build artifact at all. The trailing-slash-only pattern matches
+at any depth — a mid-pattern slash would have anchored it to the repo root and silently
+missed `myopic-studio/scripts/blender/`, which is exactly how `scripts/.tmp-*.mjs` came to
+match nothing.
+
+### Still not verified, and not verifiable here
+
+- **No live parse.** Still no `ANTHROPIC_API_KEY` in this container. The parser now offers the
+  model **30 rows** built from `poses.json` at require time; whether it picks 1-of-30
+  reliably is untested and remains the single largest untested behaviour in the app.
+- **Nothing seen in the viewport.** No WebGL here; the gates prove the code compiles, builds
+  and passes its unit tests, not that a scene renders.
+- **The garment bind path has never run**, per hunk 4 above.
+- **v1.10's acceptance list is still 0 of 6**, and criterion 1 was itself corrected by v1.11.
+
+---
+
 ## Outstanding-gates verification (2026-09-11): all three gates pass, and the brief's pose baseline is eight commits stale
 
 **The brief targeted the owner's Mac; this session ran in a Claude Code web container against
@@ -3330,6 +3556,12 @@ PRD (`PRD.md`); its header read **1.2** (never bumped past the first amendment) 
 "There is no `pose` field anywhere". Both become false the moment phase 2 lands; update
 `CLAUDE.md` in that commit. It was deliberately not touched here (docs scope was PRD + STATE).
 
+**Follow-up, same day: v1.11 closed as not adopted.** The drafted v1.11 (byte budget for the
+per-pose library) is superseded by v2.0, which retires that library. Its lesson — a size cap
+only holds if a test asserts it — is now a paragraph in PRD §11 v2.0, applied to the rigged
+figure `.glb`s. Its two STATE.md entries (9 September) are carried above, marked not adopted,
+and its `.pyc` untracking landed with them. The branch is safe to delete once this merges.
+
 ### Gate evidence (run sequentially from `myopic-studio/`, after `npm ci`, on the edited tree)
 
 1. `npx tsc --noEmit` → exit 0, no output.
@@ -3346,3 +3578,4 @@ PRD (`PRD.md`); its header read **1.2** (never bumped past the first amendment) 
 4. [ ] **Gizmo and sliders** — one override store; soft-limit warnings in the properties panel.
 5. [ ] **Foot IK** — plant feet on a flat floor at `y = 0`, hard-clamped.
 6. [ ] **Migration shim** — legacy `standing`/`sitting`/`crouching` GLB references → named poses; legacy pose GLBs retired after.
+7. [ ] **Size ceiling test** — per-file and total byte cap on the rigged figure `.glb`s, asserted beside `min.y ≈ 0`; values set from the first real export.
