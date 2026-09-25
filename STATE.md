@@ -3576,6 +3576,15 @@ and its `.pyc` untracking landed with them. The branch is safe to delete once th
 2. [ ] **Pose model** — `FigurePose` in `scene.ts`; `poses.json` rows become per-joint rotation tables.
 3. [ ] **Parser** — base pose id plus relative tweaks, converted to absolute rotations before writing.
 4. [ ] **Gizmo and sliders** — one override store; soft-limit warnings in the properties panel.
-5. [ ] **Foot IK** — plant feet on a flat floor at `y = 0`, hard-clamped.
+5. [ ] **Foot IK** — plant feet on a flat plane at the character's own `position.y` (v2.1 clarification), hard-clamped.
 6. [ ] **Migration shim** — legacy `standing`/`sitting`/`crouching` GLB references → named poses; legacy pose GLBs retired after.
 7. [ ] **Size ceiling test** — per-file and total byte cap on the rigged figure `.glb`s, asserted beside `min.y ≈ 0`; values set from the first real export.
+8. [ ] **Support height (PRD v2.1)** — parser sets `position.y` to the top of the prop a character stands or sits on, plus a mocked parser test. Needs a live parse of *Pier at Dawn* to close.
+
+### PRD v2.1 adopted (2026-09-25): support height — DOCS ONLY
+
+The 11 September "pier" finding is decided: **the parser writes the support height into
+`position.y`** (owner's choice of three: rejected a `restsOn` field and manual-only editing;
+viewport auto-lift was already ruled out). v2.0 decision 8 is clarified in place so foot IK
+plants at the character's own `position.y`, not world zero — without that the two decisions
+would fight. No code changed. Build pending as open item 8 above.
