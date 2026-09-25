@@ -3054,6 +3054,164 @@ divergent work, belong in a further amendment once that sweep runs.
 The four remote branches above are **no longer in that category** — they are read, measured
 and ordered. What remains for them is the merge itself, and hunk 4's design question.
 
+## Outstanding-gates verification (2026-09-11): all three gates pass, and the brief's pose baseline is eight commits stale
+
+**The brief targeted the owner's Mac; this session ran in a Claude Code web container against
+a fresh clone.** Same shape as the 8 September entry above, and the same split in what it can
+answer: **Step 3 ran in full and passed; Steps 1 and 2 are local-machine work and did not
+run.** Nothing was committed beyond this entry — `git status --porcelain` was empty before the
+gates and empty after them (`build/` is gitignored).
+
+The brief opened *"HEAD is `60ba0e8` on `main`, in sync with `origin/main`."* That was the
+premise for its size table, its suite counts and its rebuild comparison, and **it is eight
+commits out of date**, which invalidates all three.
+
+### The finding that matters: the brief's baseline predates the arm-weight fix
+
+`origin/main` is `708602a` (#35). `60ba0e8` (#24) is its ancestor by **8 commits** — PRs #28
+through #35. `git rev-list --left-right --count HEAD...origin/main` returns
+`0  0`: this container's checkout *is* `origin/main`, so the drift is on the Mac side, not
+here.
+
+The brief's eight-row size table reproduces `60ba0e8`'s byte *counts* **exactly, on all eight
+rows** — it is a size table, and the distinction matters below. That is how the drift was
+identified, independent of the commit graph:
+
+| file | brief / `60ba0e8` | `708602a` |
+| --- | --- | --- |
+| `standing.glb` | 512,396 | **512,356** |
+| `standing-female.glb` | 512,404 | **512,364** |
+| `sitting.glb` | 512,388 | 512,392 |
+| `sitting-female.glb` | 512,400 | 512,400 |
+| `crouching.glb` | 512,392 | 512,392 |
+| `crouching-female.glb` | 512,396 | 512,400 |
+| `lying.glb` | 512,448 | 512,448 |
+| `lying-female.glb` | 512,456 | 512,456 |
+
+`git diff --name-status 60ba0e8..HEAD -- public/assets/poses/` reports **30 files changed —
+22 added and all 8 modified**. Not two: **every binary in the brief's table has different
+bytes at `708602a`**, confirmed by object hash, the arm-weight bleed fix from #34 ("Add eleven
+poses, fix arm-weight bleed…") whose reasoning is in the Track 1c entry above.
+
+**The size column hides this, which is the trap.** Four of the eight — `sitting-female`,
+`crouching`, `lying`, `lying-female` — are byte-for-byte *different* at an **identical byte
+count**, so a comparison that checks only file size scores them as unchanged. Size is not a
+fidelity check; it catches the ~156 KB fallback-generator signature and nothing finer.
+
+**Two consequences for Step 1, stated plainly.**
+
+1. The brief's step 6 says *"byte-identical is ideal"*. Run against a table recorded at
+   `60ba0e8`, a **correct** rebuild fails that test on **all eight** files, and on four of
+   them the size column would still read as a pass. The comparison fails on the baseline, not
+   on the output — and would do so while looking half-green.
+2. The library is **30 files, not 8**. A rebuild checked only against the eight would leave
+   22 unverified. The sequencing trap recorded in the 8 September entry is **no longer live**:
+   it was conditional on v1.10 landing *before* the manikin poses, and the merge went the
+   recommended way round — #34 then #35. `POSES` in `build-pose-glbs.py` now holds **15
+   keys**, matching `poses.json`'s 15 bare names, so `build:poses` regenerates the whole
+   thirty. Counted in the script, not assumed from the merge order.
+
+**Pull `main` on the Mac before Step 1, then re-record the table for all thirty files.** The
+table below is that record, taken at `708602a`.
+
+The same staleness explains the brief's suite-count expectation. It predicted **151 / 10
+suites** (**11** with the untracked `spike.test.ts`). The 8 September entry already recorded
+the move to 209/12; at `708602a` it is **239 / 13**. `spike.test.ts` is untracked, so it is
+absent from any clone: `CI=true npm run test:ci -- --testPathIgnorePatterns=spike` was run and
+returned the same **13 / 239** as the plain gate. That discrepancy cannot be reproduced
+anywhere but the Mac.
+
+### Gates, verbatim, on `708602a`
+
+```
+npx tsc --version    → Version 4.9.5          (checked before trusting the typecheck)
+npx tsc --noEmit     → clean, exit 0
+CI=true npm run test:ci
+                     → Test Suites: 13 passed, 13 total
+                       Tests:       239 passed, 239 total
+                       Time:        3.155 s
+CI=true npm run build
+                     → Compiled successfully.
+                       212.43 kB gz  build/static/js/main.5366fae7.js
+                       3.8 kB gz     build/static/css/main.69a34038.css
+```
+
+`npm install` added 1,387 packages and reported **48 vulnerabilities**, up from the ~34 noted
+in CLAUDE.md. Still the `react-scripts` transitive cruft, still left alone; `audit fix --force`
+would break the CRA toolchain. No `EPERM` on the build — that fault is Mac-local.
+
+### Pose library measured at `708602a` — the baseline a rebuild should be diffed against
+
+All thirty files load, and **all thirty are grounded**: `|min.y| < 0.001` on every one, the
+base-anchored convention `poses.test.ts` asserts. Heights are `max.y` in metres.
+
+| pose | bytes | height | min.y | `-female` bytes | height | min.y |
+| --- | --- | --- | --- | --- | --- | --- |
+| `arms-raised` | 512,356 | 1.9094 | 0 | 512,360 | 1.7881 | 0 |
+| `crouching` | 512,392 | 1.2674 | 0 | 512,400 | 1.2345 | 0 |
+| `gesturing` | 512,352 | 1.6900 | 0 | 512,360 | 1.6393 | 0 |
+| `head-down` | 512,356 | 1.6650 | 0 | 512,364 | 1.6094 | 0 |
+| `kneeling` | 512,392 | 1.3137 | 0 | 512,396 | 1.2941 | 0 |
+| `leaning-back` | 512,352 | 1.6285 | 0 | 512,360 | 1.5857 | 0 |
+| `looking-off` | 512,356 | 1.6900 | 0 | 512,360 | 1.6393 | 0 |
+| `lying` | 512,448 | 0.2904 | 0 | 512,456 | 0.2826 | 0 |
+| `pointing` | 512,352 | 1.6900 | 0 | 512,360 | 1.6393 | 0 |
+| `sitting-ground` | 512,392 | 1.0738 | 0 | 512,396 | 1.0180 | 0 |
+| `sitting` | 512,392 | 1.4054 | 0 | 512,400 | 1.3666 | 0 |
+| `slumped` | 512,396 | 1.4249 | 0 | 512,400 | 1.3766 | 0 |
+| `standing` | 512,356 | 1.6900 | 0 | 512,364 | 1.6393 | 0 |
+| `turned-to-listen` | 512,352 | 1.6900 | 0 | 512,364 | 1.6393 | 0 |
+| `walking` | 512,392 | 1.6607 | 0 | 512,404 | 1.5977 | 0 |
+
+Two readings that matter for a rebuild check:
+
+- **`standing` is 1.6900 (default figure) and 1.6393 (female)** — the brief's expected
+  1.690 / 1.639, so the figures themselves are unchanged in stature by the eight commits.
+  The female is **not** ~2.9× the male; no split-normals regression present.
+- **Every file is ~512 KB. Nothing is near 156 KB**, the primitive-mannequin signature of
+  `scripts/generate-pose-glbs.mjs`. The committed binaries are authored figure geometry.
+- `lying` at 0.2904 is body **thickness**, not stature — the figure is on its back, and its
+  length shows in `z` (−1.6900 → 0). Not a broken export.
+
+### What could not run here, and what each needs
+
+- **Step 1, the rebuild.** No Blender in the container. Separately, `assets-src/` holds only
+  `README.md` and `.gitignore`: the 48 MB CC0 bundle and `garments.blend` are gitignored and
+  therefore absent from **any** clone, which is the blocker v1.10 already recorded against
+  itself. `load_standing_glb` removes the bundle dependency for poses but not for garments.
+- **Step 2, the three live parses.** No `myopic-studio/.env` and no `ANTHROPIC_API_KEY` in the
+  environment. `.env` is gitignored, correctly. **The mocked `parser.test.ts` was not
+  substituted for a live parse** — it mocks `global.fetch`, so it proves nothing about the
+  §11 v1.9 set-piece defaults at the parser boundary, which is the entire point of that gate.
+  That item stays open, as it has since 11 August.
+- **Step 0's working copy.** None of it exists here: clean tree, no stashes, no
+  `.git/rebase-merge/`, no ` N.ext` conflict copies, no `STATE 2.md`, no untracked `.myo`
+  scenes. The eight tracked scenes and `storyboard.json` are unmodified at `HEAD`. The brief's
+  phantom-rebase and do-not-touch-the-stashes cautions were moot here, and were honoured by
+  having nothing to honour.
+
+### Step 0 as reported, not as witnessed
+
+Recorded for continuity, sourced from the brief alone. **This session saw none of it** and it
+should not be read as verified: 373 iCloud duplicates found, none tracked; 101 deleted plus
+`myopic-studio/build/` (649 files) and two `.tmp-*.mjs` scratch scripts; `STATE 2.md` and
+`cf4b5e61-…84 2.myo` deliberately kept. The one detail worth carrying forward is that a
+deleted `lying 2.glb` was **156,004 bytes** — the fallback-generator signature — against a
+committed `lying.glb` of 512,448. Consistent with the measurements above, and a reminder that
+the two generators are one reflexive `node` invocation apart.
+
+### Still to do, on the machine that has the files
+
+1. `git pull origin main` on the Mac. Everything else is downstream of this.
+2. Re-record the pre-rebuild table for **thirty** files, then Step 1's rebuild and comparison
+   against the table above.
+3. Step 2's three live parses — set-piece regression, pose selection, flag path — and the
+   on-disk `.myo` check for `sets` / `set_visibility` in snake_case.
+4. Re-run the gates on the Mac. Expect **14 suites** — the 13 tracked here plus the
+   untracked, local-only `spike.test.ts` — and 239 tests plus whatever spike contributes.
+   **Not the 11 the brief predicted**: that adds spike to a 10-suite tree that no longer
+   exists.
+
 ---
 
 ## PRD v2.0 adopted — mannequin articulation (2026-09-25): DOCS ONLY
