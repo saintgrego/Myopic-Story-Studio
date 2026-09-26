@@ -36,7 +36,7 @@ The review prompt was written for the owner's Mac. It ran in a **cloud container
    - **My opinion: an erratum is acceptable.** The named list is the operative spec and never changed. §5's `JointName` type already spelled out the same 20 names. Only a summary count was wrong, so no decision is reopened.
    - **The case against:** every other PRD change (v1.1–v2.1) is a versioned §11 amendment. This one creates a precedent for editing closed-decision text without a version. A "v2.0.1" entry in §11 would keep the convention uniform at almost no cost.
    - **One more thing to confirm:** STATE.md says "the owner had the count corrected". I can't verify that approval from the repo. If you did not approve it, the commit went beyond the builder's remit.
-2. **Should the bundle rebuild (finding 1) gate the merge, or follow it?** It gates the merge if the committed figures must be reproducible from the source of truth before phase 2 builds on them. That is my recommendation. If the `.glb`-route provenance is acceptable for now, it can follow the merge.
+2. **RESOLVED 26 September 2026 — the Mac bundle rebuild gates the merge (owner decision).** Procedure: Appendix A. Original question: **should the bundle rebuild (finding 1) gate the merge, or follow it?** It gates the merge if the committed figures must be reproducible from the source of truth before phase 2 builds on them. That is my recommendation. If the `.glb`-route provenance is acceptable for now, it can follow the merge.
 3. **Re-run `build:poses` to give the pose library its hair?** This is an existing backlog item, but it matters more now that the figures have hair and the poses do not (finding 7). It is out of scope for this PR.
 
 ## Step 1 — scope checks
@@ -233,3 +233,67 @@ The file was deleted after the run, and `git status --short` was clean.
 | The Mac's local state: Step 0, stashes, untracked files, `spike.test.ts` suite count | Not this machine; nothing on the Mac was read or changed |
 | Figures rendered inside the app | By design nothing references them until phase 2 |
 | Owner approval of the erratum | The approval is not recorded in the repo |
+
+## Appendix A — the Mac bundle rebuild (gates the merge)
+
+Run from `myopic-studio/` on `review/rig-phase1`. Each step writes only to `/tmp`; the committed binaries are never touched.
+
+1. **Build from the bundle into a temp folder.**
+   ```bash
+   B=${BLENDER:-/Applications/Blender.app/Contents/MacOS/Blender}
+   "$B" --background --factory-startup --python scripts/blender/build-figure-glbs.py -- \
+     assets-src/human-base-meshes-bundle-v1.4.1/human_base_meshes_bundle.blend /tmp/figs-bundle \
+     2>&1 | tee /tmp/figs-bundle.log
+   ```
+   Pass: exit 0, two `wrote … mannequin*.glb` lines. Fail: any traceback — stop and report it.
+2. **Set up the compare script.**
+   ```bash
+   mkdir -p /tmp/rigcmp && ln -sf "$PWD/node_modules" /tmp/rigcmp/node_modules
+   # paste the script below into /tmp/rigcmp/cmp.mjs
+   ```
+3. **Compare against the committed figures.**
+   ```bash
+   (cd /tmp/rigcmp && node cmp.mjs "$OLDPWD/public/assets/figures" /tmp/figs-bundle "committed vs bundle")
+   ```
+4. **Read the result.**
+   - **Pass (merge may proceed):** same vertex and triangle counts, max Δ vertex, max Δ joint and max Δ weight all below about 1e-4, `min.y` 0.0000, both files under 1,000,000 bytes.
+   - **Anything else:** do not merge. Keep `/tmp/figs-bundle.log` and the compare output; that goes into the fix prompt (likely remedy per finding 1: remove Multires before `weld()`).
+
+`cmp.mjs`:
+
+```js
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+const [A, B, label] = process.argv.slice(2);
+const loader = new GLTFLoader();
+const load = (f) => new Promise((res, rej) => { const b = readFileSync(f); loader.parse(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength), '', (g) => res(g.scene), rej); });
+function dump(scene) {
+  scene.updateMatrixWorld(true);
+  const pos = [], attrs = {}; let verts = 0, tris = 0; const bones = {};
+  scene.traverse((o) => {
+    if (o.isBone) bones[o.name] = o.getWorldPosition(new THREE.Vector3());
+    if (!o.isMesh) return;
+    const g = o.geometry; const p = g.attributes.position; verts += p.count; tris += (g.index ? g.index.count : p.count) / 3;
+    const v = new THREE.Vector3();
+    for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i).applyMatrix4(o.matrixWorld); pos.push(v.x, v.y, v.z); }
+    for (const k of ['skinWeight', 'skinIndex']) if (g.attributes[k]) attrs[k] = (attrs[k] || []).concat(Array.from(g.attributes[k].array));
+  });
+  return { pos, verts, tris, bones, attrs, box: new THREE.Box3().setFromObject(scene) };
+}
+const files = readdirSync(A).filter((f) => f.endsWith('.glb')).sort();
+let worst = 0;
+for (const f of files) {
+  const a = dump(await load(`${A}/${f}`)), b = dump(await load(`${B}/${f}`));
+  let d = a.pos.length === b.pos.length ? 0 : Infinity;
+  if (d === 0) for (let i = 0; i < a.pos.length; i++) d = Math.max(d, Math.abs(a.pos[i] - b.pos[i]));
+  let bd = 0; for (const k in a.bones) bd = Math.max(bd, b.bones[k] ? a.bones[k].distanceTo(b.bones[k]) : Infinity);
+  let wd = 0; const wa = a.attrs.skinWeight, wb = b.attrs.skinWeight;
+  if (wa) { if (!wb || wa.length !== wb.length) wd = Infinity; else for (let i = 0; i < wa.length; i++) wd = Math.max(wd, Math.abs(wa[i] - wb[i])); }
+  const sa = statSync(`${A}/${f}`).size, sb = statSync(`${B}/${f}`).size;
+  const same = readFileSync(`${A}/${f}`).equals(readFileSync(`${B}/${f}`));
+  worst = Math.max(worst, d);
+  console.log(`${f.padEnd(26)} ${same ? 'IDENTICAL' : sa === sb ? 'same-size' : 'DIFF-SIZE'} ${String(sa).padStart(7)}/${String(sb).padStart(7)} verts ${a.verts}/${b.verts} tris ${a.tris}/${b.tris} maxΔpos ${d.toExponential(1)} minY ${a.box.min.y.toFixed(4)}/${b.box.min.y.toFixed(4)} maxY ${a.box.max.y.toFixed(4)}/${b.box.max.y.toFixed(4)}` + (Object.keys(a.bones).length ? ` bones ${Object.keys(a.bones).length} maxΔbone ${bd.toExponential(1)} maxΔweight ${wd.toExponential(1)}` : ''));
+}
+console.log(`${label}: ${files.length} files, worst per-vertex Δ ${worst.toExponential(2)} m`);
+```
