@@ -7,6 +7,7 @@
 
 **Changelog** (v1.1–v1.10 are recorded in full in section 11):
 
+- **26 September 2026 — erratum, no version change** — §3 v2.0 decision 2's joint count corrected from 19 to **20**. The named list (6 centreline + 7 per side) and §5's `JointName` were always 20; only the count was wrong. Nothing decided changes. Corrected in place in §3 and §11 v2.0.
 - **25 September 2026 — v2.1** — Support height: the parser rests a character on the prop it stands or sits on by setting `position.y`; §3 v2.0 decision 8 clarified so foot IK plants at the character's own `position.y`, not world zero.
 - **25 September 2026 — v2.0** — Mannequin articulation brought into scope; §2 non-goal reversed; §3 decisions 9 items added; schema FigurePose added; poses.json format change.
 
@@ -63,7 +64,7 @@ These are settled. Do not re-open them or propose alternatives.
 ### v2.0 Articulation (closed 25 September 2026)
 
 1. **Skeleton:** Mixamo-style bone names, stored **without** the `mixamorig:` prefix. The loader strips the prefix on import.
-2. **Joint set (19):** `Hips`, `Spine`, `Spine1`, `Spine2`, `Neck`, `Head`, plus Left/Right `Shoulder`, `Arm`, `ForeArm`, `Hand`, `UpLeg`, `Leg`, `Foot`.
+2. **Joint set (20):** `Hips`, `Spine`, `Spine1`, `Spine2`, `Neck`, `Head`, plus Left/Right `Shoulder`, `Arm`, `ForeArm`, `Hand`, `UpLeg`, `Leg`, `Foot`.
 3. **Pose model:** a named base pose plus per-joint overrides. Overrides are **absolute** local rotations, never deltas.
 4. **Rotation format:** Euler XYZ in degrees in the schema; converted to quaternions internally.
 5. **Parser: hybrid.** The LLM returns a base pose id plus small relative tweaks; the parser converts the tweaks to absolute rotations before writing.
@@ -553,7 +554,7 @@ Sleeves need the arm's axis and trousers need each leg's; a ring has neither. Pr
 **What changed in this document:**
 
 - **Section 2, non-goal #7 reversed in part.** Rigging, skeletons, IK and manual joint posing are removed from the non-goals; the procedural mannequin may now be articulated. Morph targets stay out and keep #7. Three non-goals are added (#8 runtime import of external/rigged assets, #9 hand IK and IK against set geometry, #10 finger articulation), and #6 is restated to name keyframe animation explicitly.
-- **Section 3 gains a "v2.0 Articulation" group** of nine closed decisions: Mixamo-style bone names without the `mixamorig:` prefix, a 19-joint set, base pose plus absolute overrides, Euler XYZ degrees in the schema, a hybrid parser, gizmo and sliders sharing one override store, soft manual limits with hard IK clamps, feet-only IK onto `y = 0`, and a loader shim for legacy pose GLBs.
+- **Section 3 gains a "v2.0 Articulation" group** of nine closed decisions: Mixamo-style bone names without the `mixamorig:` prefix, a 20-joint set *(erratum 26 September 2026: originally "19", a miscount of the same list)*, base pose plus absolute overrides, Euler XYZ degrees in the schema, a hybrid parser, gizmo and sliders sharing one override store, soft manual limits with hard IK clamps, feet-only IK onto `y = 0`, and a loader shim for legacy pose GLBs.
 - **Section 5 specifies `FigurePose`** as a `scene.ts` addition — specified, not implemented.
 - **Content format:** `poses.json` rows change from GLB paths to per-joint rotation tables; legacy pose GLBs are retired once the loader shim is in place.
 
@@ -563,7 +564,7 @@ Sleeves need the arm's axis and trousers need each leg's; a ring has neither. Pr
 
 **Implementation phases (none started):**
 
-1. Rig — the 19-joint Mixamo-named skeleton on the mannequin, with prefix stripping on import.
+1. Rig — the 20-joint Mixamo-named skeleton on the mannequin, with prefix stripping on import.
 2. Pose model — `FigurePose`, base pose plus absolute overrides, `poses.json` as rotation tables.
 3. Parser — base pose id plus relative tweaks, converted to absolute rotations before writing.
 4. Gizmo and sliders — both writing to the same override store, with soft-limit warnings.
