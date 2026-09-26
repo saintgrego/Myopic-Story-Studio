@@ -34,6 +34,7 @@
     "eject": "react-scripts eject",
     "server": "node server/index.js",
     "build:poses": "BLENDER=${BLENDER:-/Applications/Blender.app/Contents/MacOS/Blender}; \"$BLENDER\" --background --factory-startup --python scripts/blender/build-pose-glbs.py -- assets-src/human-base-meshes-bundle-v1.4.1/human_base_meshes_bundle.blend public/assets/poses ${GARMENTS:-assets-src/garments.blend}",
+    "build:figures": "BLENDER=${BLENDER:-/Applications/Blender.app/Contents/MacOS/Blender}; \"$BLENDER\" --background --factory-startup --python scripts/blender/build-figure-glbs.py -- assets-src/human-base-meshes-bundle-v1.4.1/human_base_meshes_bundle.blend public/assets/figures",
     "dev": "concurrently -n server,web -c blue,green \"npm:server\" \"npm:start\""
   },
   "eslintConfig": {
