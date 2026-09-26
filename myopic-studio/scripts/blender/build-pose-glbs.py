@@ -373,7 +373,7 @@ def build_hair(obj, m, style):
     return pieces
 
 
-def parent_to_head(objs, rig):
+def parent_to_head(objs, rig, head='head'):
     """Rigid-parent hair to the head bone instead of skinning it to the whole rig.
 
     Automatic weighting is right for a body and wrong for hair: hair does not deform, it
@@ -387,7 +387,7 @@ def parent_to_head(objs, rig):
     bpy.ops.object.select_all(action='DESELECT')
     bpy.context.view_layer.objects.active = rig
     bpy.ops.object.mode_set(mode='POSE')
-    rig.data.bones.active = rig.data.bones['head']
+    rig.data.bones.active = rig.data.bones[head]
     for o in objs:
         o.select_set(True)
     rig.select_set(True)
@@ -474,6 +474,10 @@ def build_armature(obj, m):
 
 
 ARM_BONES = ('upperarm.L', 'upperarm.R', 'forearm.L', 'forearm.R')
+# The bones a shoulder-shelf vertex may belong to instead of the arm (see the above-apex
+# rule in `resolve_arm_bleed`). Both sets are parameters because the rigged-figure build
+# (build-figure-glbs.py, PRD §11 v2.0) binds the same body to a differently named skeleton.
+CORE_BONES = ('spine', 'neck')
 
 
 
@@ -571,7 +575,7 @@ def arm_vertices(obj, m):
                      'watertight enough to weld — see surface_graph().')
 
 
-def resolve_arm_bleed(obj, rig, m):
+def resolve_arm_bleed(obj, rig, m, arm_bones=ARM_BONES, core_bones=CORE_BONES):
     """Take the flank, hip and outer thigh back off the arm bones.
 
     THE DEFECT, measured before it was fixed: automatic (bone-heat) weighting assigns by
@@ -595,7 +599,7 @@ def resolve_arm_bleed(obj, rig, m):
     """
     arms, apex = arm_vertices(obj, m)
     groups = {vg.name: vg for vg in obj.vertex_groups}
-    keep = [n for n in groups if n not in ARM_BONES]
+    keep = [n for n in groups if n not in arm_bones]
     segments = {n: (rig.data.bones[n].head_local.copy(), rig.data.bones[n].tail_local.copy())
                 for n in groups}
     world = world_verts(obj)
@@ -613,15 +617,15 @@ def resolve_arm_bleed(obj, rig, m):
             # A vertex nearer the spine or neck than the upperarm is trapezius or upper
             # chest, and must not swing with the arm; leaving it arm-weighted folds the
             # shoulder cap straight through the torso when the arm goes overhead.
-            near_arm = min(point_segment_distance(co, *segments[n]) for n in ARM_BONES
+            near_arm = min(point_segment_distance(co, *segments[n]) for n in arm_bones
                            if n in segments)
-            near_core = min(point_segment_distance(co, *segments[n]) for n in ('spine', 'neck')
+            near_core = min(point_segment_distance(co, *segments[n]) for n in core_bones
                             if n in segments)
             if near_arm <= near_core:
                 continue  # deltoid and shoulder cap: the blend here is real, leave it
         member = {gr.group: gr.weight for gr in v.groups}
         bleed = 0.0
-        for name in ARM_BONES:
+        for name in arm_bones:
             vg = groups.get(name)
             if vg is None or vg.index not in member:
                 continue
@@ -637,7 +641,7 @@ def resolve_arm_bleed(obj, rig, m):
     print(f'BIND moved arm-bone weight off {moved} body vertices')
 
 
-def bind(obj, rig, m):
+def bind(obj, rig, m, arm_bones=ARM_BONES, core_bones=CORE_BONES):
     bpy.ops.object.select_all(action='DESELECT')
     obj.select_set(True)
     rig.select_set(True)
@@ -651,7 +655,7 @@ def bind(obj, rig, m):
     # crease either, which `resolve_arm_bleed`'s above-apex rule does. It only blurs the
     # elbow and knee creases that make a bent limb read as bent.
 
-    resolve_arm_bleed(obj, rig, m)
+    resolve_arm_bleed(obj, rig, m, arm_bones, core_bones)
 
 
 def rotate(rig, bone_name, axis, angle):
@@ -1035,4 +1039,8 @@ def main():
             print(f'wrote {out}/{name}{suffix}.glb')
 
 
-main()
+# Guarded so build-figure-glbs.py can import the measurement and binding code without
+# running the pose build. Blender's --python runs a script as __main__, so the CLI is
+# unchanged.
+if __name__ == '__main__':
+    main()

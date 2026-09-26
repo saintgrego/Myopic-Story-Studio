@@ -15,6 +15,7 @@ import { resolveLightColor } from '../lib/lighting';
 import { buildSetGroups } from '../lib/sets';
 import type { Environment, MeshRef, SceneFile, Vec3 } from '../types/scene';
 import { characterColor, propColor } from '../palette';
+import { stripRigPrefixes } from '../rig';
 import POSES from '../poses.json';
 import PROPS from '../props.json';
 
@@ -170,6 +171,9 @@ function buildObject(mesh: MeshRef, color: number, onGltfError: (path: string) =
     new GLTFLoader().load(
       mesh.path,
       (gltf) => {
+        // Joints are addressed by bare Mixamo names (PRD §3 v2.0, decision 1). Harmless on
+        // a file with no skeleton; nothing else here depends on node names.
+        stripRigPrefixes(gltf.scene);
         gltf.scene.traverse((child) => {
           if (child instanceof THREE.Mesh) {
             child.castShadow = true;

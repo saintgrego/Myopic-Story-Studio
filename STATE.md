@@ -3572,13 +3572,13 @@ and its `.pyc` untracking landed with them. The branch is safe to delete once th
 
 ### Open items — v2.0 implementation phases (all NOT STARTED)
 
-1. [ ] **Rig** — 19-joint Mixamo-named skeleton on the mannequin; loader strips `mixamorig:`.
+1. [x] **Rig** — 20-joint Mixamo-named skeleton on the mannequin; loader strips `mixamorig:`. *Done 2026-09-26 — see "Rig: phase 1" below. (Written as "19-joint" when first logged; corrected with the PRD erratum.)*
 2. [ ] **Pose model** — `FigurePose` in `scene.ts`; `poses.json` rows become per-joint rotation tables.
 3. [ ] **Parser** — base pose id plus relative tweaks, converted to absolute rotations before writing.
 4. [ ] **Gizmo and sliders** — one override store; soft-limit warnings in the properties panel.
 5. [ ] **Foot IK** — plant feet on a flat plane at the character's own `position.y` (v2.1 clarification), hard-clamped.
 6. [ ] **Migration shim** — legacy `standing`/`sitting`/`crouching` GLB references → named poses; legacy pose GLBs retired after.
-7. [ ] **Size ceiling test** — per-file and total byte cap on the rigged figure `.glb`s, asserted beside `min.y ≈ 0`; values set from the first real export.
+7. [x] **Size ceiling test** — per-file and total byte cap on the rigged figure `.glb`s, asserted beside `min.y ≈ 0`; values set from the first real export. *Done 2026-09-26 with phase 1 — 1,000,000 B per file, 2,000,000 B total.*
 8. [ ] **Support height (PRD v2.1)** — parser sets `position.y` to the top of the prop a character stands or sits on, plus a mocked parser test. Needs a live parse of *Pier at Dawn* to close.
 
 ### PRD v2.1 adopted (2026-09-25): support height — DOCS ONLY
@@ -3588,3 +3588,102 @@ The 11 September "pier" finding is decided: **the parser writes the support heig
 viewport auto-lift was already ruled out). v2.0 decision 8 is clarified in place so foot IK
 plants at the character's own `position.y`, not world zero — without that the two decisions
 would fight. No code changed. Build pending as open item 8 above.
+
+## Rig: phase 1 (2026-09-26) — the Mixamo-named skeleton, built, skinned and tested
+
+**PRD §11 v2.0 phase 1 is built.** Two skinned figure `.glb`s in `public/assets/figures/`
+(`mannequin.glb`, `mannequin-female.glb`), rest pose, one skinned mesh each carrying the
+named joint set; `src/rig.ts` holds the joint table and the `mixamorig:` stripper, which
+`Viewport.tsx` now runs on every loaded glTF. **Nothing in the app points at the figures
+yet** — phase 2 (the pose model) is what starts posing them; scenes still use the per-pose
+library, which is untouched. Also closes open item 7 (the byte ceiling).
+
+### Finding for the owner: decision 2 says 19 joints and names 20
+
+§3 v2.0 decision 2: "Joint set (19): `Hips`, `Spine`, `Spine1`, `Spine2`, `Neck`, `Head`,
+plus Left/Right `Shoulder`, `Arm`, `ForeArm`, `Hand`, `UpLeg`, `Leg`, `Foot`." That is
+6 + 2 × 7 = **20**, and §5's `JointName` type spells out the same 20. **Built to the list**
+(it is the more specific statement, and the type agrees with it); `figures.test.ts` pins
+the list and says why. **Resolved the same day:** the owner had the count corrected, and
+PRD.md now carries a changelog erratum (no version change) with "20" in §3 decision 2 and
+§11 v2.0.
+
+### What was built
+
+1. **`scripts/blender/build-figure-glbs.py`** (`npm run build:figures`). A new script, not
+   an edit to the pose build: renaming or splitting the pose rig's 15 bones would re-pose
+   every committed pose `.glb`. It **imports** `measure()`, hair, `bind()` and the arm-bleed
+   correction from `build-pose-glbs.py` rather than copying them. The skeleton is new:
+   - Spine chain crotch → neck base split 15/30/27/28% into Hips/Spine/Spine1/Spine2
+     (proportions — a torso has no sliceable landmark in between, stated in the script).
+   - Neck from the measured neck base to a skull joint at 0.13 H below the crown (the pose
+     rig's `head` bone started at the neck base and so carried the whole neck).
+   - Arm chain by **arc length** along the arm's centreline (upper arm / forearm / hand at
+     0.42 / 0.755 / 0.88 of shoulder → fingertip), with clavicles.
+   - Joint depth (y) from the **middle of each slice's extent**, not its centroid — the
+     centroid follows vertex density and put the hip joint 7 cm in front of the thigh and
+     the skull pivot in the face.
+2. **`build-pose-glbs.py`: parameters only, behaviour identical.** `resolve_arm_bleed`/`bind`
+   take the arm and core bone sets (defaults unchanged), `parent_to_head` takes the bone
+   name, and `main()` is behind `if __name__ == '__main__'` so the figure script can import
+   it. **Verified geometry-identical**: all 30 poses rebuilt before and after the edit
+   differ by at most 6e-8 m per vertex, the same as two runs of the unedited script
+   (the exporter is not byte-deterministic run to run, so `cmp` is useless here).
+3. **`src/rig.ts`** — `JOINT_PARENT`, `JOINTS`, `JointName`, `stripRigPrefix(es)`.
+4. **`src/__tests__/figures.test.ts`** — 22 tests: joint set and hierarchy; prefix stripping
+   (unit cases plus a real `GLTFLoader.parse` of a prefixed file); per figure: one skinned
+   mesh, exactly the joint set with the right parents, no prefixes, `min.y ≈ 0` at rest,
+   the local-axis convention; and the byte ceiling.
+
+### Two gotchas worth keeping
+
+- **GLTFLoader deletes the colon.** `PropertyBinding.sanitizeNodeName` strips `:` from node
+  names, so a Mixamo bone reaches the scene graph as `mixamorigHips`, not `mixamorig:Hips`.
+  A stripper that matched only `mixamorig:` would match nothing. The pattern is
+  `^mixamorig\d*[:_]?`, and the loader-level test is there to catch this.
+- **A figure loaded from `.glb` must be welded before bone heat.** The committed
+  `standing.glb` is split along every UV/normal seam (the pose build's `surface_graph`
+  docstring measured this). Bone heat diffuses per connected piece, so each shell was
+  weighted alone, and posed, **the figure opened along its seams** — a ring round the
+  waist, the bikini line, the neck, daylight through each. The pose build never showed it
+  because its single spine bone spans all those seams. `weld()` (merge by distance, 1e-5)
+  removed 1,428 vertices per figure and the tears with them.
+
+### The local-axis convention (what phase 2's rotation tables mean)
+
+Every bone's local **+Y runs head → tail**; roll puts local **+Z toward the figure's front**
+on every bone except the feet, whose +Z points **up**. Rendered and confirmed: a **positive**
+rotation about local X swings a bone's tail **forward** — thighs +90° come up to seated,
+shins −90° fold back under, arms +60°/+150° come forward/overhead, Spine1 +15° leans in,
+Head +20° drops the chin. The test asserts the axes, so a re-export that rolled bones
+differently fails rather than silently re-meaning every stored rotation.
+
+### Evidence
+
+- **Renders** (three.js r160 in headless Chromium/SwiftShader, loading the committed `.glb`s,
+  local Euler rotations applied on top of rest): `docs/rig-rest-front.png` (rest, both
+  figures, hair skinned to Head), `docs/rig-flexion-side.png` and `docs/rig-flexion-front.png`
+  (the seated/arms test above). No tears, no hair drift; the overhead arm is clean at the
+  shoulder, which is the arm-bleed correction doing its job on the new bone names.
+- **Sizes** (the ceiling's basis): `mannequin.glb` 821,072 B, `mannequin-female.glb`
+  838,036 B, 1,659,108 B total. Ceilings 1,000,000 B / 2,000,000 B.
+- **Gates** on the finished tree, from `myopic-studio/`: `npx tsc --noEmit` exit 0;
+  `npm run test:ci` **14 suites, 261 tests passed**; `CI=true npm run build` **Compiled
+  successfully**.
+
+### Not verified here, and what each needs
+
+- **Built from the committed `standing*.glb`, not the CC0 bundle** — the bundle is not in
+  this container. Blender was the pip `bpy` 5.0.1 module (the owner's last recorded run
+  was Blender 5.2.0). The bundle path (`npm run build:figures`) is the same code after
+  `load_figure`, but has not been run; on the owner's machine it will also bring whatever
+  multires detail the `.glb` route cannot. Run it and re-check the renders and sizes.
+- **Bundle path + `weld()` + multires**: merging on a mesh that still carries a multires
+  modifier is expected to be a no-op (the bundle mesh is already one piece) — unconfirmed.
+- **Not seen in the app viewport.** No scene references the figures yet; a character
+  pointed at `/assets/figures/mannequin.glb` by hand should render in rest pose. The palette
+  exemption does not list `figures/` yet, so it would keep the exporter's default material
+  — phase 2 decides how figures are registered.
+- **Extreme angles** show the usual linear-skinning pinch at the knee and a shoulder crease
+  under full overhead; blocking-scale acceptable, same class as the pose build's notes.
+
