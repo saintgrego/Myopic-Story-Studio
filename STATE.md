@@ -3572,7 +3572,7 @@ and its `.pyc` untracking landed with them. The branch is safe to delete once th
 
 ### Open items — v2.0 implementation phases (all NOT STARTED)
 
-1. [x] **Rig** — 19-joint Mixamo-named skeleton on the mannequin; loader strips `mixamorig:`. *Done 2026-09-26 — see "Rig: phase 1" below (the named set is 20 joints, not 19).*
+1. [x] **Rig** — 20-joint Mixamo-named skeleton on the mannequin; loader strips `mixamorig:`. *Done 2026-09-26 — see "Rig: phase 1" below. (Written as "19-joint" when first logged; corrected with the PRD erratum.)*
 2. [ ] **Pose model** — `FigurePose` in `scene.ts`; `poses.json` rows become per-joint rotation tables.
 3. [ ] **Parser** — base pose id plus relative tweaks, converted to absolute rotations before writing.
 4. [ ] **Gizmo and sliders** — one override store; soft-limit warnings in the properties panel.
@@ -3604,8 +3604,9 @@ library, which is untouched. Also closes open item 7 (the byte ceiling).
 plus Left/Right `Shoulder`, `Arm`, `ForeArm`, `Hand`, `UpLeg`, `Leg`, `Foot`." That is
 6 + 2 × 7 = **20**, and §5's `JointName` type spells out the same 20. **Built to the list**
 (it is the more specific statement, and the type agrees with it); `figures.test.ts` pins
-the list and says why. The PRD's "19" was left as written — correcting a closed decision's
-text is the owner's call. The STATE.md open-items line above keeps "19" as it was written.
+the list and says why. **Resolved the same day:** the owner had the count corrected, and
+PRD.md now carries a changelog erratum (no version change) with "20" in §3 decision 2 and
+§11 v2.0.
 
 ### What was built
 

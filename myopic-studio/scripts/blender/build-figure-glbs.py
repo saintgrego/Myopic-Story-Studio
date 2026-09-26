@@ -1,6 +1,6 @@
 # Builds the RIGGED figure library (PRD §11 v2.0, implementation phase 1: the rig).
 #
-# One skinned .glb per figure, in its rest pose, carrying the 19-joint skeleton PRD §3
+# One skinned .glb per figure, in its rest pose, carrying the 20-joint skeleton PRD §3
 # "v2.0 Articulation" closes on. This is what the app will pose at runtime once phase 2
 # lands; until then nothing in src/ references these files and the per-pose library that
 # build-pose-glbs.py writes stays the one scenes use.

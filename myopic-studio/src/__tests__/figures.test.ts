@@ -36,9 +36,8 @@ function skinnedMeshes(root: THREE.Object3D): THREE.SkinnedMesh[] {
 }
 
 describe('joint set', () => {
-  // PRD §3 v2.0 decision 2 names six centreline joints plus seven per side. Its heading
-  // says "19"; the list it gives is 20, and the list is what §5's JointName type spells
-  // out. This pins the list.
+  // PRD §3 v2.0 decision 2: six centreline joints plus seven per side, 20 in all (the
+  // count once read "19" — a miscount, corrected by erratum on 26 September 2026).
   test('is the six centreline joints plus seven per side', () => {
     expect(JOINTS).toHaveLength(6 + 2 * 7);
     for (const side of ['Left', 'Right']) {
