@@ -1,12 +1,13 @@
 # PRD — Myopic! 3-D Studio
 
-**Version:** 2.0
-**Date:** 13 July 2026 (amended 31 July 2026 — see section 11; latest amendment 25 September 2026, v2.0)
+**Version:** 2.1
+**Date:** 13 July 2026 (amended 31 July 2026 — see section 11; latest amendment 25 September 2026, v2.1)
 **Supersedes:** `myopic-3d-studio.md` v0.1 (28 April 2026), which remains valid as a component reference.
 **Owner:** Gregory Jericho
 
 **Changelog** (v1.1–v1.10 are recorded in full in section 11):
 
+- **25 September 2026 — v2.1** — Support height: the parser rests a character on the prop it stands or sits on by setting `position.y`; §3 v2.0 decision 8 clarified so foot IK plants at the character's own `position.y`, not world zero.
 - **25 September 2026 — v2.0** — Mannequin articulation brought into scope; §2 non-goal reversed; §3 decisions 9 items added; schema FigurePose added; poses.json format change.
 
 ---
@@ -68,7 +69,7 @@ These are settled. Do not re-open them or propose alternatives.
 5. **Parser: hybrid.** The LLM returns a base pose id plus small relative tweaks; the parser converts the tweaks to absolute rotations before writing.
 6. **Editing:** a rotation gizmo on the selected joint **and** properties-panel sliders, both writing to the same override store.
 7. **Limits:** soft limits for manual editing (warn in the properties panel, allow the value); the IK solver clamps hard.
-8. **IK:** feet only, planting onto a flat floor at `y = 0`.
+8. **IK:** feet only, planting onto a flat floor at `y = 0`. **Clarified in v2.1: `y = 0` means the character's own base — its `position.y` — not world zero.** A figure standing on a 0.3 m pier plants its feet at 0.3. Still a flat plane: no IK against set geometry (non-goal #9).
 9. **Migration:** a loader shim maps legacy `standing`/`sitting`/`crouching` GLB references to named poses.
 
 ---
@@ -137,6 +138,7 @@ Per section 4 of the spec. Extraction targets: who, where, when, what, mood, fra
 - **Output:** strict JSON matching the scene schema. No prose, no markdown fences.
 - **Ambiguity:** any parameter that cannot be confidently inferred is written into a `flagged_params` array and surfaced with a `[?]` marker in the properties panel.
 - **Partial re-prompt:** re-prompting updates only flagged or selected components. It does not blow away user edits.
+- **Support height (v2.1).** When the prompt puts a character on a prop ("sits at the end of the pier", "stands on the stage"), the parser sets the character's `position.y` to the top of that prop. No new field: `position.y` is still where the figure touches its support. See section 11 v2.1.
 
 ---
 
@@ -567,3 +569,32 @@ Sleeves need the arm's axis and trousers need each leg's; a ring has neither. Pr
 4. Gizmo and sliders — both writing to the same override store, with soft-limit warnings.
 5. Foot IK — feet planted on a flat floor at `y = 0`, hard-clamped.
 6. Migration shim — legacy `standing`/`sitting`/`crouching` GLB references mapped to named poses.
+
+### v2.1 — 25 September 2026: support height — figures rest on the props they stand or sit on
+
+**Decided by the owner on 25 September 2026**, from a finding logged in `STATE.md` on 11 September ("Test-scene run on a remote clone"): in *Pier at Dawn* the figure is sunk 0.3 m into the pier, and in *Two Detectives* a seated figure's knees read through the desk front.
+
+**The diagnosis.** Both objects in each scene obey the base-anchored convention exactly. The parser places every object independently and has no notion of one resting on another, so "sits alone at the end of a wooden pier" produces a correct pier and a correct figure with no relation between them. This is a parser gap, not a renderer bug.
+
+**The decision: the parser writes the support height into `position.y`.** When the prompt puts a character on a prop, the parser sets the character's `position.y` to the top of that prop. The base-anchored convention is unchanged — `position.y` was always "where the object touches what holds it up", and on a pier that is the deck, not the ground. No schema change, no `.myo` change, no `buildObject()` change.
+
+**Why v2.0 decision 8 had to be clarified with it.** Decision 8 plants feet "onto a flat floor at `y = 0`". Read as world zero, it would pull a correctly lifted figure's feet back through the pier, and the two decisions would fight. It now reads as the character's own `position.y`. The IK surface stays a flat plane; non-goal #9 (no IK against set geometry) is untouched.
+
+**Rejected:**
+
+- **A `restsOn: propId` field on `Character`.** Sturdier if the prop moves later, but it is a schema change and a second source of truth for vertical position — the pattern section 4 exists to prevent.
+- **The viewport lifting figures onto nearby props.** It would silently override the scene model, and a renderer that moves things is exactly what the base-anchored convention forbids. The 11 September entry warned against this before the decision was taken.
+- **Leaving it to manual editing.** Free to build, but it makes the user do the same correction on every such scene.
+
+**Accepted cost:** moving a prop in the panel does not carry the character with it. The user adjusts `position.y` by hand, as today.
+
+**Authorized to build (not started):**
+
+1. The parser prompt in `server/parser.js`: when a character is placed on a prop, set `position.y` to that prop's top (base `position.y` plus vertical extent). The parser's existing `flaggedParams` path covers a support it cannot size.
+2. A parser test (Anthropic API mocked, as in `parser.test.ts`) asserting the lifted `position.y` for a character-on-prop fixture.
+
+**Acceptance (owner-verifiable):**
+
+- [ ] A fresh live parse of the *Pier at Dawn* prompt places the figure's `position.y` at the deck top, and the camera view shows her sitting on the pier, not in it.
+- [ ] A character with no stated support still parses to `position.y = 0`.
+- [ ] `npx tsc --noEmit`, `npm run test:ci` and `CI=true npm run build` stay green.
