@@ -32,7 +32,7 @@ The review prompt was written for the owner's Mac. It ran in a **cloud container
 
 ## Owner decisions needed
 
-1. **Erratum or amendment for "19 → 20"?** Commit `87b2275` edits the text of a §3 closed decision in place. It adds a changelog line and an inline note in §11 v2.0, with no version bump.
+1. **RESOLVED 26 September 2026 — erratum approved by the owner; no §11 amendment.** Original question: **erratum or amendment for "19 → 20"?** Commit `87b2275` edits the text of a §3 closed decision in place. It adds a changelog line and an inline note in §11 v2.0, with no version bump.
    - **My opinion: an erratum is acceptable.** The named list is the operative spec and never changed. §5's `JointName` type already spelled out the same 20 names. Only a summary count was wrong, so no decision is reopened.
    - **The case against:** every other PRD change (v1.1–v2.1) is a versioned §11 amendment. This one creates a precedent for editing closed-decision text without a version. A "v2.0.1" entry in §11 would keep the convention uniform at almost no cost.
    - **One more thing to confirm:** STATE.md says "the owner had the count corrected". I can't verify that approval from the repo. If you did not approve it, the commit went beyond the builder's remit.
